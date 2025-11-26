@@ -15,12 +15,12 @@
     "prisma:studio": "prisma studio"
   },
   "dependencies": {
-    "@prisma/client": "^5.20.0",
+    "@prisma/client": "5.19.1",
     "axios": "^1.6.2",
     "dotenv": "^16.4.1",
     "express": "^4.19.0",
     "openai": "^4.0.0",
-    "prisma": "^5.20.0"
+    "prisma": "5.19.1"
   },
   "engines": {
     "node": ">=20.0.0"
