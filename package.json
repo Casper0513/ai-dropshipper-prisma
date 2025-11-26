@@ -1,0 +1,28 @@
+{
+  "name": "ai-dropshipper",
+  "version": "1.2.0",
+  "description": "AI-powered automatic dropshipping importer using RapidAPI, OpenAI, and Shopify, with a small web dashboard and Prisma analytics logging.",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "import": "node cli.js",
+    "sync": "node cli.js",
+    "dev": "NODE_ENV=development node src/server.js",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate-dev": "prisma migrate dev --name init",
+    "prisma:migrate-deploy": "prisma migrate deploy",
+    "prisma:studio": "prisma studio"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.20.0",
+    "axios": "^1.6.2",
+    "dotenv": "^16.4.1",
+    "express": "^4.19.0",
+    "openai": "^4.0.0",
+    "prisma": "^5.20.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

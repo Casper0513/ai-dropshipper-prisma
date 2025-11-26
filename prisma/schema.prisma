@@ -1,0 +1,38 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Run {
+  id            Int          @id @default(autoincrement())
+  keyword       String
+  markupPercent Float
+  source        String
+  status        String
+  createdCount  Int          @default(0)
+  errorMessage  String?
+  startedAt     DateTime     @default(now())
+  finishedAt    DateTime?
+
+  products      ProductLog[]
+}
+
+model ProductLog {
+  id               Int      @id @default(autoincrement())
+  run              Run      @relation(fields: [runId], references: [id], onDelete: Cascade)
+  runId            Int
+
+  asin             String?
+  title            String
+  sourcePrice      Float?
+  finalPrice       Float?
+  currency         String   @default("USD")
+  shopifyProductId String?
+  shopifyHandle    String?
+
+  createdAt        DateTime @default(now())
+}
