@@ -1,264 +1,242 @@
+// src/server.js
 import express from "express";
+import bodyParser from "body-parser";
 import { CONFIG } from "./config.js";
 import { importKeyword } from "./pipeline.js";
 import { prisma } from "./db/client.js";
+import { log } from "./utils/logger.js";
 
 const app = express();
-app.use(express.urlencoded({ extended: false }));
-app.use(express.json());
+app.use(bodyParser.urlencoded({ extended: true }));
+app.use(bodyParser.json());
 
-// Healthcheck for Railway
-app.get("/health", (req, res) => {
-  res.json({ ok: true });
-});
-
+/* -------------------------------------------------------
+   HTML DASHBOARD RENDERING
+---------------------------------------------------------*/
 function renderDashboardHtml({ runs }) {
-  const keywordsHtml = CONFIG.keywords
-    .map(k => `<span class="badge">${k}</span>`)
-    .join("");
-
-  const rows = runs.length
-    ? runs
-        .map(run => {
-          return `
-          <tr>
-            <td>${run.startedAt.toISOString().replace("T", " ").slice(0, 19)}</td>
-            <td>${run.keyword}</td>
-            <td>${run.createdCount}</td>
-            <td>${run.markupPercent}%</td>
-            <td>${run.status}</td>
-          </tr>`;
-        })
-        .join("")
-    : `<tr><td colspan="5" style="text-align:center;">No runs yet</td></tr>`;
-
-  return `<!DOCTYPE html>
+  return `
+<!DOCTYPE html>
 <html>
 <head>
-  <meta charset="utf-8" />
   <title>AI Dropshipper Dashboard</title>
   <style>
     body {
-      margin: 0;
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      background: #f6f6f7;
-      color: #202223;
+      font-family: Arial, sans-serif;
+      background: #f5f5f5;
+      padding: 20px;
+      line-height: 1.5;
     }
-    header {
-      background: #111827;
-      color: #f9fafb;
-      padding: 16px 24px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
+    h1 {
+      margin-top: 0;
     }
-    header h1 {
-      margin: 0;
-      font-size: 20px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    header span.logo-dot {
-      display: inline-block;
-      width: 10px;
-      height: 10px;
-      border-radius: 999px;
-      background: #22c55e;
-    }
-    main {
-      max-width: 1000px;
-      margin: 24px auto;
-      padding: 0 16px 40px;
+    .container {
+      max-width: 960px;
+      margin: auto;
     }
     .card {
       background: #fff;
-      border-radius: 12px;
-      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
       padding: 20px;
-      margin-bottom: 16px;
-    }
-    .card h2 {
-      margin-top: 0;
-      font-size: 18px;
-    }
-    .badge {
-      display: inline-block;
-      background: #eff6ff;
-      color: #1e3a8a;
-      border-radius: 999px;
-      padding: 4px 10px;
-      font-size: 12px;
-      margin: 2px;
-    }
-    .config-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-      gap: 12px;
-      margin-top: 8px;
-    }
-    .config-item {
-      font-size: 13px;
-      color: #4b5563;
-    }
-    label {
-      display: block;
-      font-size: 13px;
-      margin-top: 8px;
-      margin-bottom: 4px;
-      font-weight: 500;
-    }
-    input, select, button {
-      font: inherit;
-    }
-    input[type="number"],
-    input[type="text"],
-    select {
-      width: 100%;
-      padding: 7px 9px;
       border-radius: 8px;
-      border: 1px solid #d1d5db;
-      box-sizing: border-box;
+      margin-bottom: 25px;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+    label { font-weight: bold; margin-top: 10px; display: block; }
+    input, select {
+      width: 100%;
+      padding: 10px;
+      margin: 8px 0 15px 0;
+      border-radius: 5px;
+      border: 1px solid #ccc;
     }
     button.primary {
-      margin-top: 12px;
-      background: #111827;
-      color: #f9fafb;
-      padding: 8px 16px;
-      border-radius: 999px;
+      background: #0070f3;
+      color: #fff;
+      padding: 10px 18px;
       border: none;
+      border-radius: 6px;
       cursor: pointer;
-      font-weight: 500;
+      font-size: 15px;
     }
     button.primary:hover {
-      background: #030712;
+      background: #0053ba;
     }
     table {
       width: 100%;
       border-collapse: collapse;
-      margin-top: 8px;
-      font-size: 13px;
+      margin-top: 15px;
     }
-    table thead {
-      background: #f3f4f6;
+    th, td {
+      padding: 10px;
+      border-bottom: 1px solid #ddd;
     }
-    table th, table td {
-      padding: 8px;
-      border-bottom: 1px solid #e5e7eb;
+    th {
+      background: #f0f0f0;
       text-align: left;
     }
-    small {
-      color: #6b7280;
-      font-size: 12px;
-    }
+    .status-success { color: green; font-weight: bold; }
+    .status-error { color: red; font-weight: bold; }
+    .status-running { color: orange; font-weight: bold; }
   </style>
 </head>
+
 <body>
-  <header>
-    <h1><span class="logo-dot"></span> AI Dropshipper</h1>
-    <div style="font-size:12px;opacity:0.8;">Shopify + RapidAPI + OpenAI</div>
-  </header>
+<div class="container">
 
-  <main>
-    <section class="card">
-      <h2>Overview</h2>
-      <div class="config-grid">
-        <div class="config-item">
-          <strong>Keywords</strong><br />
-          ${keywordsHtml || "<small>No KEYWORDS set in .env</small>"}
-        </div>
-        <div class="config-item">
-          <strong>Import price range</strong><br />
-          ${CONFIG.priceRange.minImport} – ${CONFIG.priceRange.maxImport} USD
-        </div>
-        <div class="config-item">
-          <strong>Default markup</strong><br />
-          +${CONFIG.pricing.markupPercent}% → ending ${CONFIG.pricing.roundTo || 0}
-        </div>
-        <div class="config-item">
-          <strong>Image mode</strong><br />
-          ${CONFIG.images.mode} ${CONFIG.images.mode === "proxy" ? "(" + CONFIG.images.proxyUrl + ")" : ""}
-        </div>
-      </div>
-    </section>
+  <h1>AI Dropshipper Dashboard</h1>
 
-    <section class="card">
-      <h2>Run Import</h2>
-      <form method="POST" action="/run-import">
-        <label for="keyword">Keyword / Collection</label>
-        <select name="keyword" id="keyword">
-          <option value="__all__">(All configured keywords)</option>
-          ${CONFIG.keywords
-            .map(k => `<option value="${k}">${k}</option>`)
-            .join("")}
-        </select>
+  <!-- Run Import Card -->
+  <div class="card">
+    <h2>Run Import</h2>
+    <form method="POST" action="/run-import">
 
-        <label for="markupPercent">Override markup % (optional)</label>
-        <input id="markupPercent" name="markupPercent" type="number" step="1" placeholder="${CONFIG.pricing.markupPercent}" />
+      <label for="mode">Mode</label>
+      <select name="mode" id="mode">
+        <option value="search">Search (keywords → products)</option>
+        <option value="product-details">Product details (ASINs → products)</option>
+        <option value="product-offers">Product offers (ASINs → info only)</option>
+        <option value="product-reviews">Product reviews (ASINs → enrichment)</option>
+        <option value="product-sellers">Product sellers (ASINs → enrichment)</option>
+        <option value="product-categories">Product categories (keyword → enrichment)</option>
+      </select>
 
-        <button class="primary" type="submit">Run import now</button>
-        <p><small>This will fetch products from RapidAPI, generate AI descriptions, and create Shopify products.</small></p>
-      </form>
-    </section>
+      <label for="keyword">Use configured keywords</label>
+      <select name="keyword" id="keyword">
+        <option value="__all__">(All configured keywords)</option>
+        ${CONFIG.keywords.map(k => `<option value="${k}">${k}</option>`).join("")}
+      </select>
 
-    <section class="card">
-      <h2>Recent runs</h2>
-      <table>
-        <thead>
+      <label for="items">Custom keywords or ASINs (comma-separated; overrides above)</label>
+      <input
+        id="items"
+        name="items"
+        type="text"
+        placeholder="e.g. wireless earbuds, B07PGL2ZSL"
+      />
+
+      <label for="markupPercent">Override markup % (optional)</label>
+      <input
+        id="markupPercent"
+        name="markupPercent"
+        type="number"
+        step="1"
+        placeholder="${CONFIG.pricing.markupPercent}"
+      />
+
+      <button class="primary" type="submit">Run import now</button>
+      <p><small>
+        - "Search" and "Product details" create Shopify products.<br>
+        - Other modes fetch data only (safe to run).
+      </small></p>
+    </form>
+  </div>
+
+  <!-- Recent Runs -->
+  <div class="card">
+    <h2>Recent Runs</h2>
+    <table>
+      <tr>
+        <th>Time</th>
+        <th>Keyword/ASIN</th>
+        <th>Mode</th>
+        <th>Status</th>
+        <th>Created</th>
+        <th>Markup</th>
+      </tr>
+
+      ${runs
+        .map(r => {
+          const st =
+            r.status === "success"
+              ? "status-success"
+              : r.status === "error"
+              ? "status-error"
+              : "status-running";
+
+          return `
           <tr>
-            <th>Time</th>
-            <th>Keyword</th>
-            <th># Products</th>
-            <th>Markup</th>
-            <th>Status</th>
+            <td>${new Date(r.startedAt).toLocaleString()}</td>
+            <td>${r.keyword}</td>
+            <td>${r.mode}</td>
+            <td class="${st}">${r.status}</td>
+            <td>${r.createdCount}</td>
+            <td>${r.markupPercent}%</td>
           </tr>
-        </thead>
-        <tbody>
-          ${rows}
-        </tbody>
-      </table>
-    </section>
-  </main>
+        `;
+        })
+        .join("")}
+    </table>
+  </div>
+
+</div>
 </body>
-</html>`;
+</html>
+`;
 }
 
+/* -------------------------------------------------------
+   ROUTES
+---------------------------------------------------------*/
 app.get("/", (req, res) => res.redirect("/dashboard"));
 
 app.get("/dashboard", async (req, res) => {
-  try {
-    const runs = await prisma.run.findMany({
-      orderBy: { startedAt: "desc" },
-      take: 20
-    });
-    res.send(renderDashboardHtml({ runs }));
-  } catch (err) {
-    console.error("Dashboard error:", err);
-    res.status(500).send("Dashboard error. Check server logs.");
-  }
+  const runs = await prisma.run.findMany({
+    orderBy: { startedAt: "desc" },
+    take: 30,
+  });
+
+  res.send(renderDashboardHtml({ runs }));
 });
 
 app.post("/run-import", async (req, res) => {
-  const { keyword, markupPercent } = req.body;
+  const { keyword, markupPercent, mode, items } = req.body;
+
   const overrideMarkup = markupPercent ? parseFloat(markupPercent) : undefined;
+  const activeMode = mode || CONFIG.mode || "search";
 
-  const keywordsToRun =
-    keyword === "__all__" || !keyword ? CONFIG.keywords : [keyword];
+  // Calculate "targets"
+  let targets = [];
 
-  for (const kw of keywordsToRun) {
+  if (items && items.trim()) {
+    // Custom comma-separated list takes full priority
+    targets = items
+      .split(",")
+      .map(t => t.trim())
+      .filter(Boolean);
+  } else if (!keyword || keyword === "__all__") {
+    // Use all keywords in .env
+    targets = CONFIG.keywords;
+  } else {
+    // Single selected keyword
+    targets = [keyword];
+  }
+
+  for (const t of targets) {
     try {
-      await importKeyword(kw, {
+      await importKeyword(t, {
         markupPercent: overrideMarkup,
-        source: "dashboard"
+        source: "dashboard",
+        mode: activeMode,
       });
     } catch (err) {
-      console.error("Import error:", err);
+      log.error("Import error:", err.message);
     }
   }
 
   res.redirect("/dashboard");
 });
 
+/* -------------------------------------------------------
+   HEALTHCHECK
+---------------------------------------------------------*/
+app.get("/health", (req, res) => {
+  res.json({ ok: true });
+});
+
+/* -------------------------------------------------------
+   START SERVER
+---------------------------------------------------------*/
 app.listen(CONFIG.server.port, () => {
-  console.log(`AI Dropshipper server listening on port ${CONFIG.server.port}`);
+  console.log(
+    `AI Dropshipper server listening on port ${CONFIG.server.port}`
+  );
 });

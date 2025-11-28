@@ -1,3 +1,4 @@
+// src/config.js
 import "dotenv/config";
 
 export const CONFIG = {
@@ -21,7 +22,7 @@ export const CONFIG = {
 
   priceRange: {
     minImport: parseFloat(process.env.MIN_PRICE_USD || "0"),
-    maxImport: parseFloat(process.env.MAX_PRICE_USD || "999999")
+    maxImport: parseFloat(process.env.MAX_PRICE_USD || "999999"),
   },
 
   pricing: {
@@ -37,5 +38,8 @@ export const CONFIG = {
 
   server: {
     port: parseInt(process.env.PORT || "3000", 10),
-  }
+  },
+
+  // NEW: default mode (fallback if UI doesn't send one)
+  mode: process.env.MODE || "search", // search | product-details | product-offers | ...
 };
