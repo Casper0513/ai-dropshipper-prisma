@@ -43,7 +43,7 @@ export async function fetchAmazonData(mode, value, page = 1) {
     let items;
 
     if (mode === "search") {
-      const raw = body?.data;
+      const raw = body?.data?.products;
       if (!Array.isArray(raw)) {
         log.error(`Non-array for "${value}" in search`, raw);
         return [];
