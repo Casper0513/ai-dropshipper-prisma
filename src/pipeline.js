@@ -1,13 +1,28 @@
-// src/pipeline.js
+
+import pLimit from "p-limit";
 import { fetchAmazonData } from "./services/rapidapi.js";
 import { generateDescription } from "./services/openai.js";
 import { createProduct } from "./services/shopify.js";
 import { normalizeProduct } from "./utils/normalize.js";
 import { applyPricingRules } from "./utils/pricing.js";
-import { enhanceImageUrl } from "./utils/images.js";
 import { CONFIG } from "./config.js";
 import { log } from "./utils/logger.js";
 import { prisma } from "./db/client.js";
+import { enhanceImage } from "./services/imageEnhancer.js";
+import { generatePlaceholderImage } from "./services/aiPlaceholder.js";
+
+const enhancementLimit = pLimit(2);
+
+async function fetchUpTo20Products(target) {
+  let all = [];
+  for (let page = 1; page <= 4; page++) {
+    const batch = await fetchAmazonData("search", target, page);
+    if (!Array.isArray(batch) || batch.length === 0) break;
+    all.push(...batch);
+    if (all.length >= 20) break;
+  }
+  return all.slice(0, 20);
+}
 
 export async function importKeyword(target, options = {}) {
   const overrideMarkup = options.markupPercent;
@@ -15,10 +30,11 @@ export async function importKeyword(target, options = {}) {
   const mode = options.mode || CONFIG.mode || "search";
 
   log.info(
-    `Starting import for "${target}" (mode: ${mode}, source: ${source}, override markup: ${overrideMarkup ?? "default"})`
+    `Starting import for "${target}" (mode: ${mode}, source: ${source}, override markup: ${
+      overrideMarkup ?? "default"
+    })`
   );
 
-  // Log Run in DB
   const run = await prisma.run.create({
     data: {
       keyword: target,
@@ -32,14 +48,17 @@ export async function importKeyword(target, options = {}) {
   });
 
   try {
-    const rawItems = await fetchAmazonData(mode, target);
+    let rawItems;
+    if (mode === "search") {
+      rawItems = await fetchUpTo20Products(target);
+    } else {
+      rawItems = await fetchAmazonData(mode, target);
+    }
 
-    // Normalize only products we can actually turn into Shopify items
-    const normalized = rawItems
+    const normalized = (rawItems || [])
       .map(p => normalizeProduct(mode, p, target))
       .filter(p => p && p.title);
 
-    // Filter by price
     const filtered = normalized.filter(p => {
       if (p.price == null || isNaN(p.price)) return false;
       return (
@@ -48,19 +67,28 @@ export async function importKeyword(target, options = {}) {
       );
     });
 
-    // Limit per run
-    const items = filtered.slice(0, 5);
+    const items = filtered.slice(0, 20);
     let createdCount = 0;
 
     for (const baseProduct of items) {
       try {
         const sellingPrice = applyPricingRules(baseProduct.price, overrideMarkup);
-        const enhancedImage = enhanceImageUrl(baseProduct.image);
+
+        let imageAttachment = null;
+        if (baseProduct.image) {
+          imageAttachment = await enhancementLimit(() =>
+            enhanceImage(baseProduct.image)
+          );
+        }
+        if (!imageAttachment) {
+          imageAttachment = await generatePlaceholderImage(baseProduct.title);
+        }
 
         const productForShopify = {
           ...baseProduct,
           price: sellingPrice,
-          image: enhancedImage,
+          imageUrl: baseProduct.image || null,
+          imageAttachment,
         };
 
         log.info(`Generating AI description for: ${baseProduct.title}`);
@@ -89,6 +117,8 @@ export async function importKeyword(target, options = {}) {
             },
           });
         }
+
+        await new Promise(res => setTimeout(res, 350));
       } catch (err) {
         log.error(
           `Pipeline error for "${baseProduct.title}" (mode: ${mode}): ${err.message}`
@@ -124,4 +154,3 @@ export async function importKeyword(target, options = {}) {
     throw err;
   }
 }
-
