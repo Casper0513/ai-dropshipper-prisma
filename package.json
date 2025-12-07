@@ -20,7 +20,8 @@
     "dotenv": "^16.4.1",
     "express": "^4.19.0",
     "openai": "^4.0.0",
-    "prisma": "5.19.1"
+    "prisma": "5.19.1",
+    "p-limit": "^4.0.0"
   },
   "engines": {
     "node": ">=20.0.0"
