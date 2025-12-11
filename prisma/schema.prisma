@@ -4,7 +4,7 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+  // ❗️ REMOVE the URL — Prisma 7 forbids it here
 }
 
 model Run {
@@ -34,7 +34,6 @@ model ProductLog {
   shopifyProductId String?
   shopifyHandle    String?
 
-  // 🔥 NEW fields for full sync + analytics:
   oldPrice         Float?
   updatedPrice     Float?
   stockStatus      String?
@@ -47,7 +46,7 @@ model SyncedVariant {
   id               Int      @id @default(autoincrement())
   asin             String?
   sku              String?
-  source           String?         // amazon | aliexpress | walmart
+  source           String?
   shopifyProductId String
   shopifyVariantId String
 
