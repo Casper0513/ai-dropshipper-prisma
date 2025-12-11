@@ -1,25 +1,41 @@
-# 🟦 1. Base image — MUST be Node 20+ for Prisma 7
+# ---------------------------------------------------
+# 🔥 MUST USE NODE 22 FOR PRISMA 7
+# ---------------------------------------------------
 FROM node:22-alpine AS builder
 
 WORKDIR /app
 
-# 🟦 2. Copy package.json (no lockfile needed)
+# ---------------------------------------------------
+# 🔥 Important Prisma 7 engine env vars
+# ---------------------------------------------------
+ENV PRISMA_CLI_QUERY_ENGINE_LIBRARY="wasm"
+ENV PRISMA_CLI_ENGINE_TYPE="library"
+ENV PRISMA_GENERATE_SKIP_POSTINSTALL="true"
+ENV PRISMA_MIGRATE_ENGINE_BINARY="wasm"
+ENV PRISMA_SCHEMA_ENGINE_BINARY="wasm"
+ENV PRISMA_QUERY_ENGINE_LIBRARY="wasm"
+ENV PRISMA_ENGINES_CHECKSUM_IGNORE="true"
+
+# ---------------------------------------------------
+# Copy package.json and install deps
+# ---------------------------------------------------
 COPY package.json ./
 
-# 🟦 3. Install dependencies BEFORE prisma generate
 RUN npm install
 
-# 🟦 4. Copy app code
+# ---------------------------------------------------
+# Copy all project files
+# ---------------------------------------------------
 COPY . .
 
-# 🟦 5. Prisma generate AFTER node_modules exist
-RUN npx prisma generate
+# ---------------------------------------------------
+# 🔥 Run Prisma generate (WASM engine mode)
+# ---------------------------------------------------
+RUN npx prisma generate --data-proxy=false --no-engine
 
-# 🟦 6. Build (only if using TypeScript)
-# If JS only, remove this line
-# RUN npm run build
-
-# 🟦 7. Build lightweight runtime image
+# ---------------------------------------------------
+# Runtime stage
+# ---------------------------------------------------
 FROM node:22-alpine AS runner
 
 WORKDIR /app
@@ -28,13 +44,7 @@ COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/src ./src
-# If you use dist/ from TypeScript, copy dist instead:
-# COPY --from=builder /app/dist ./dist
 
 ENV NODE_ENV=production
 
-# If JS runs from src (no TypeScript):
 CMD ["node", "src/server.js"]
-
-# If TypeScript build output lives in dist:
-# CMD ["node", "dist/server.js"]
