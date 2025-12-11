@@ -4,7 +4,7 @@ let prisma;
 
 if (!globalThis.__prisma) {
   prisma = new PrismaClient({
-    errorFormat: "pretty",
+    errorFormat: "minimal"
   });
 
   if (process.env.NODE_ENV !== "production") {
