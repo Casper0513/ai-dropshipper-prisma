@@ -1,11 +1,13 @@
-import { defineConfig } from "@prisma/config";
-import { env } from "process";
+import { defineConfig } from "@prisma/client";
 
 export default defineConfig({
-  datasources: {
-    db: {
-      provider: "postgresql",
-      url: env.DATABASE_URL,      // Prisma 7 requires URL here
-    },
+  // ❌ DO NOT set engineType: "client"
+  // ❌ DO NOT set adapter
+  // ❌ DO NOT set accelerateUrl
+
+  datasource: {
+    url: process.env.DATABASE_URL,
   },
+
+  // normal engine mode (default)
 });
