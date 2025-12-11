@@ -15,16 +15,15 @@
     "prisma:studio": "prisma studio"
   },
   "dependencies": {
-    "@prisma/client": "7.1.0",
-    "@prisma/adapter-postgresql": "7.1.0",
+    "@prisma/client": "6.4.1",
     "axios": "^1.6.2",
     "dotenv": "^16.4.1",
     "express": "^4.19.0",
     "openai": "^4.0.0",
     "p-limit": "^4.0.0",
-    "prisma": "7.1.0"
+    "prisma": "6.4.1",
   },
   "engines": {
-    "node": ">=22.0.0"
+    "node": "25.1.0"
   }
 }

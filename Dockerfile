@@ -1,7 +1,7 @@
 # ---------------------------------------------------
 # 🔥 Use Debian-based Node image — NOT alpine
 # ---------------------------------------------------
-FROM node:22 AS builder
+FROM node:25.1.0 AS builder
 
 WORKDIR /app
 
@@ -24,7 +24,7 @@ RUN npx prisma generate
 # ---------------------------------------------------
 # Runtime stage
 # ---------------------------------------------------
-FROM node:22 AS runner
+FROM node:25.1.0 AS runner
 
 WORKDIR /app
 
