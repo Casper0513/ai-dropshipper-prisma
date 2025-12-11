@@ -1,3 +1,5 @@
+// prisma:engineType = "binary"
+
 generator client {
   provider = "prisma-client-js"
 }
