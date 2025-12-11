@@ -60,7 +60,9 @@ export async function importKeyword(target, options = {}) {
       .filter(p => p && p.title);
 
     const filtered = normalized.filter(p => {
+      if (!p.inStock) return false;
       if (p.price == null || isNaN(p.price)) return false;
+      if (p.price <= 0) return false;
       return (
         p.price >= CONFIG.priceRange.minImport &&
         p.price <= CONFIG.priceRange.maxImport

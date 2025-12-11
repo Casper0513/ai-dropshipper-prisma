@@ -1,0 +1,27 @@
+
+// prisma/schema.additions.prisma
+// Merge this into your existing prisma/schema.prisma (do NOT overwrite the whole file).
+
+model SyncedVariant {
+  id               Int      @id @default(autoincrement())
+  asin             String?
+  sku              String?
+  source           String?
+  shopifyProductId String
+  shopifyVariantId String
+  currentPrice     Float?
+  lastCostPrice    Float?
+  inStock          Boolean  @default(true)
+  lastCheckedAt    DateTime @updatedAt
+  createdAt        DateTime @default(now())
+  deleted          Boolean  @default(false)
+}
+
+// Add these optional fields to your existing ProductLog model:
+//
+//   oldPrice      Float?
+//   updatedPrice  Float?
+//   stockStatus   String?
+//   profitAtSale  Float?
+//
+// Then run: npx prisma migrate dev --name add_variant_sync_profit_fields
