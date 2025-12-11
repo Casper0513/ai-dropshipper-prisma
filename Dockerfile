@@ -1,42 +1,30 @@
 # ---------------------------------------------------
-# 🔥 MUST USE NODE 22 FOR PRISMA 7
+# 🔥 Use Debian-based Node image — NOT alpine
 # ---------------------------------------------------
-FROM node:22-alpine AS builder
+FROM node:22 AS builder
 
 WORKDIR /app
-
-# ---------------------------------------------------
-# 🔥 Important Prisma 7 engine env vars
-# ---------------------------------------------------
-ENV PRISMA_CLI_QUERY_ENGINE_LIBRARY="wasm"
-ENV PRISMA_CLI_ENGINE_TYPE="library"
-ENV PRISMA_GENERATE_SKIP_POSTINSTALL="true"
-ENV PRISMA_MIGRATE_ENGINE_BINARY="wasm"
-ENV PRISMA_SCHEMA_ENGINE_BINARY="wasm"
-ENV PRISMA_QUERY_ENGINE_LIBRARY="wasm"
-ENV PRISMA_ENGINES_CHECKSUM_IGNORE="true"
 
 # ---------------------------------------------------
 # Copy package.json and install deps
 # ---------------------------------------------------
 COPY package.json ./
-
 RUN npm install
 
 # ---------------------------------------------------
-# Copy all project files
+# Copy app code
 # ---------------------------------------------------
 COPY . .
 
 # ---------------------------------------------------
-# 🔥 Run Prisma generate (WASM engine mode)
+# Prisma generate — NO wasm overrides
 # ---------------------------------------------------
-RUN npx prisma generate --data-proxy=false --no-engine
+RUN npx prisma generate
 
 # ---------------------------------------------------
 # Runtime stage
 # ---------------------------------------------------
-FROM node:22-alpine AS runner
+FROM node:22 AS runner
 
 WORKDIR /app
 
