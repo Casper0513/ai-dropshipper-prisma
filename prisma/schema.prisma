@@ -34,5 +34,28 @@ model ProductLog {
   shopifyProductId String?
   shopifyHandle    String?
 
+  // 🔥 NEW fields for full sync + analytics:
+  oldPrice         Float?
+  updatedPrice     Float?
+  stockStatus      String?
+  profitAtSale     Float?
+
   createdAt        DateTime @default(now())
+}
+
+model SyncedVariant {
+  id               Int      @id @default(autoincrement())
+  asin             String?
+  sku              String?
+  source           String?         // amazon | aliexpress | walmart
+  shopifyProductId String
+  shopifyVariantId String
+
+  currentPrice     Float?
+  lastCostPrice    Float?
+  inStock          Boolean  @default(true)
+
+  lastCheckedAt    DateTime @updatedAt
+  createdAt        DateTime @default(now())
+  deleted          Boolean  @default(false)
 }
