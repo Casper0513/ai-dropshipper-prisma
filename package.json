@@ -16,7 +16,6 @@
   },
   "dependencies": {
     "@prisma/client": "^7.1.0",
-    "@prisma/adapter-postgresql": "5.18.0",
     "axios": "^1.6.2",
     "dotenv": "^16.4.1",
     "express": "^4.19.0",
