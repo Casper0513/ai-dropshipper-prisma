@@ -1,22 +1,29 @@
-FROM node:20-bullseye
+# 🟦 1. Base image
+FROM node:18-alpine AS builder
 
 WORKDIR /app
 
-# Install system dependencies Prisma needs
-RUN apt-get update && apt-get install -y openssl libssl-dev && rm -rf /var/lib/apt/lists/*
+# 🟦 2. Copy package files
+COPY package.json package-lock.json ./
 
-# Copy and install dependencies
-COPY package*.json ./
+# 🟦 3. Install dependencies BEFORE prisma generate
 RUN npm install
 
-# Copy the rest of your application
+# 🟦 4. Copy rest of the app
 COPY . .
 
-# Generate Prisma client
+# 🟦 5. Generate Prisma client (NOW node_modules exists)
 RUN npx prisma generate
 
-ENV NODE_ENV=production
-EXPOSE 3000
+# 🟦 6. Production stage
+FROM node:18-alpine AS runner
+WORKDIR /app
 
-# Run migrations then start server
-CMD ["sh", "-c", "npx prisma migrate deploy && node src/server.js"]
+# Copy node_modules & prisma client
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/package*.json ./
+
+ENV NODE_ENV=production
+CMD ["node", "dist/server.js"]
