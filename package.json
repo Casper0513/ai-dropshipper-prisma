@@ -21,7 +21,7 @@
     "express": "^4.19.0",
     "openai": "^4.0.0",
     "p-limit": "^4.0.0",
-    "prisma": "6.4.1",
+    "prisma": "6.4.1"
   },
   "engines": {
     "node": "25.1.0"
