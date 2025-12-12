@@ -1,3 +1,5 @@
+import "./Dashboard.css";
+
 const { useState, useEffect } = React;
 
 const API_BASE = "";
@@ -531,6 +533,4 @@ function DashboardApp() {
   );
 }
 
-// Mount React app
-const root = ReactDOM.createRoot(document.getElementById("root"));
-root.render(<DashboardApp />);
+export default DashboardApp;

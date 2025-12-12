@@ -1,0 +1,17 @@
+.dashboard {
+  padding: 30px;
+  font-family: Arial, sans-serif;
+}
+
+.card {
+  background: #f5f5f5;
+  padding: 20px;
+  margin-bottom: 20px;
+  border-radius: 6px;
+}
+
+button {
+  margin-right: 10px;
+  padding: 8px 14px;
+  cursor: pointer;
+}
