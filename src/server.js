@@ -1,33 +1,28 @@
 import express from "express";
 import cors from "cors";
 import path from "path";
-import { fileURLToPath } from "url";
 
 const app = express();
-
-// Helpers for ESM paths
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 // Middleware
 app.use(cors());
 app.use(express.json());
 
-// Serve static files from /public
-app.use(express.static(path.join(__dirname, "../public")));
+// 🚨 ABSOLUTE STATIC PATH (Docker-safe)
+app.use(express.static("public"));
 
-// === Dashboard Route Fix ===
+// ✅ Dashboard route (no __dirname, no ESM weirdness)
 app.get("/dashboard", (req, res) => {
-  res.sendFile(path.join(__dirname, "../public/dashboard.html"));
+  res.sendFile(path.resolve("public/dashboard.html"));
 });
 
-// Example: root route
+// Root (optional)
 app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "../public/index.html"));
+  res.redirect("/dashboard");
 });
 
-// Server start
+// Start server
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log("✅ Server running on port", PORT);
 });
