@@ -8,15 +8,15 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// 🚨 ABSOLUTE STATIC PATH (Docker-safe)
-app.use(express.static("public"));
+// ✅ Serve dashboard static files
+app.use("/dashboard", express.static("src/dashboard"));
 
-// ✅ Dashboard route (no __dirname, no ESM weirdness)
+// ✅ Dashboard route (HTML entry)
 app.get("/dashboard", (req, res) => {
-  res.sendFile(path.resolve("public/dashboard.html"));
+  res.sendFile(path.resolve("src/dashboard/dashboard.html"));
 });
 
-// Root (optional)
+// Optional root redirect
 app.get("/", (req, res) => {
   res.redirect("/dashboard");
 });
