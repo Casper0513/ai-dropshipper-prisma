@@ -31,7 +31,8 @@
     "prisma": "^6.0.0"
   },
 {
- "scripts": {
+  "scripts": {
     "start": "prisma generate && node src/server.js"
   }
 }
+
