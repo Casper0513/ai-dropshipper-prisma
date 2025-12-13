@@ -2,50 +2,49 @@
 // src/services/notify.js
 import nodemailer from "nodemailer";
 
-const ALERT_EMAIL_TO = process.env.ALERT_EMAIL_TO;
-const ALERT_EMAIL_FROM = process.env.ALERT_EMAIL_FROM;
-const SMTP_HOST = process.env.SMTP_HOST;
-const SMTP_PORT = Number(process.env.SMTP_PORT || "587");
-const SMTP_USER = process.env.SMTP_USER;
-const SMTP_PASS = process.env.SMTP_PASS;
-
-let transporter = null;
-if (SMTP_HOST && SMTP_USER && SMTP_PASS) {
-  transporter = nodemailer.createTransport({
-    host: SMTP_HOST,
-    port: SMTP_PORT,
-    secure: SMTP_PORT === 465,
-    auth: {
-      user: SMTP_USER,
-      pass: SMTP_PASS,
-    },
-  });
+function bool(v) {
+  return String(v || "").toLowerCase() === "true";
 }
 
+const EMAIL_ENABLED = bool(process.env.EMAIL_ENABLED);
+
 export async function sendPriceIncreaseAlert({ asin, oldPrice, newPrice, ratio }) {
-  if (!transporter || !ALERT_EMAIL_TO) {
-    console.log("Email alert skipped (no SMTP or ALERT_EMAIL_TO set)");
+  // Never crash your worker if email isn't set up
+  if (!EMAIL_ENABLED) {
+    console.log(
+      `📧 (email disabled) Price increase alert: ${asin} ${oldPrice} -> ${newPrice} (+${(ratio * 100).toFixed(1)}%)`
+    );
     return;
   }
 
-  const subject = `Price increase detected for ${asin || "product"}`;
-  const text = `
-Price increase detected:
+  const host = process.env.SMTP_HOST;
+  const port = Number(process.env.SMTP_PORT || "587");
+  const user = process.env.SMTP_USER;
+  const pass = process.env.SMTP_PASS;
 
-ASIN: ${asin || "N/A"}
-Old Price: ${oldPrice}
-New Price: ${newPrice}
-Change: ${(ratio * 100).toFixed(1)}%
+  const from = process.env.ALERT_FROM || user;
+  const to = process.env.ALERT_TO;
 
-You may want to adjust your Shopify pricing or pause ads.
-  `.trim();
+  if (!host || !user || !pass || !to) {
+    console.log("📧 Email enabled but SMTP env vars missing; skipping alert.");
+    return;
+  }
 
-  await transporter.sendMail({
-    from: ALERT_EMAIL_FROM || SMTP_USER,
-    to: ALERT_EMAIL_TO,
-    subject,
-    text,
+  const transporter = nodemailer.createTransport({
+    host,
+    port,
+    secure: port === 465,
+    auth: { user, pass },
   });
 
-  console.log("📧 Sent price increase alert email");
+  const subject = `Price increased: ${asin} (+${(ratio * 100).toFixed(1)}%)`;
+  const text =
+    `Product: ${asin}\n` +
+    `Old Price: ${oldPrice}\n` +
+    `New Price: ${newPrice}\n` +
+    `Change: ${(ratio * 100).toFixed(1)}%\n`;
+
+  await transporter.sendMail({ from, to, subject, text });
+  console.log("📧 Price increase alert sent:", asin);
 }
+
