@@ -37,3 +37,24 @@ model ProductLog {
   createdAt        DateTime @default(now())
 }
 
+model SyncedVariant {
+  id               Int      @id @default(autoincrement())
+
+  asin             String?
+  sku              String?
+
+  source           String   // amazon | aliexpress | walmart
+
+  shopifyProductId String
+  shopifyVariantId String
+
+  currentPrice     Float?
+  lastCostPrice    Float?
+
+  inStock          Boolean  @default(true)
+  deleted          Boolean  @default(false)
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
