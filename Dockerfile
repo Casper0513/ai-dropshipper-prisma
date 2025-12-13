@@ -5,6 +5,10 @@ FROM node:20.11.1 AS builder
 
 WORKDIR /app
 
+# 🔒 FORCE PRISMA TO USE BINARY ENGINE
+ENV PRISMA_CLI_QUERY_ENGINE_TYPE=binary
+ENV PRISMA_CLIENT_ENGINE_TYPE=binary
+
 COPY package.json ./
 RUN npm install
 
