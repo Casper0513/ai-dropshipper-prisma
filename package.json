@@ -22,7 +22,8 @@
     "openai": "^4.0.0",
     "p-limit": "^4.0.0",
     "prisma": "6.4.1",
-    "cors": "^2.8.5"
+    "cors": "^2.8.5",
+    "nodemailer": "^6.9.14"
   },
   "engines": {
     "node": "25.1.0"
