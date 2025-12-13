@@ -25,10 +25,10 @@
     "p-limit": "^4.0.0"
   },
   "engines": {
-    "node": "25.1.0"
+    "node": "20.11.1"
   },
   "devDependencies": {
-    "prisma": "^6.0.0"
+    "prisma": "^6.4.0"
   },
   "scripts": {
     "start": "node src/server.js"
