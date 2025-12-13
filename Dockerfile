@@ -1,34 +1,29 @@
-# ---------------------------------------------------
-# 🔥 Use Debian-based Node image — NOT alpine
-# ---------------------------------------------------
+# =========================
+# Builder
+# =========================
 FROM node:20.11.1 AS builder
 
 WORKDIR /app
 
-# ---------------------------------------------------
-# Copy package.json and install deps
-# ---------------------------------------------------
 COPY package.json ./
 RUN npm install
 
-# ---------------------------------------------------
-# Copy app code
-# ---------------------------------------------------
 COPY . .
-RUN npx prisma generate
-# ---------------------------------------------------
-# Runtime stage
-# ---------------------------------------------------
-FROM node:20.11.1 AS runner
 
+RUN npx prisma generate
+
+# =========================
+# Runner
+# =========================
+FROM node:20.11.1 AS runner
 
 WORKDIR /app
 
 COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/package.json ./
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/src ./src
+COPY --from=builder /app/package.json ./
 
 ENV NODE_ENV=production
 
-CMD ["npm", "run", "start"]
+CMD ["node", "src/server.js"]
