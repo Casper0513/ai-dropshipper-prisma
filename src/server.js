@@ -1,6 +1,7 @@
 import express from "express";
 import cors from "cors";
 import path from "path";
+import { startAutoSync } from "./workers/autoSyncRunner.js";
 
 // 🔗 IMPORT YOUR PIPELINE + DB
 import { importKeyword } from "./pipeline.js";
@@ -139,5 +140,7 @@ app.get("/api/profit", async (req, res) => {
 // ===============================
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
+  // Start background workers
+  startAutoSync();
   console.log("✅ Server running on port", PORT);
 });
