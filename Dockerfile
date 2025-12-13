@@ -16,8 +16,6 @@ RUN npm install
 # ---------------------------------------------------
 COPY . .
 
-RUN prisma generate
-
 # ---------------------------------------------------
 # Runtime stage
 # ---------------------------------------------------
@@ -32,4 +30,4 @@ COPY --from=builder /app/src ./src
 
 ENV NODE_ENV=production
 
-CMD ["node", "src/server.js"]
+CMD ["npm", "run", "start"]
