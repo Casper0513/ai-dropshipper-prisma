@@ -23,7 +23,7 @@ app.get("/dashboard", (req, res) => {
 });
 
 app.get("/", (req, res) => {
-  res.redirect("/dashboard");
+  res.redirect("/dashboard/dashboard.html");
 });
 
 // ===============================
