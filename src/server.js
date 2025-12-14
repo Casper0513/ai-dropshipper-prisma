@@ -19,7 +19,7 @@ app.use(express.json());
 app.use("/dashboard", express.static("src/dashboard"));
 
 app.get("/", (req, res) => {
-  res.redirect("/dashboard/dashboard.html");
+  res.redirect("/dashboard");
 });
 
 // ===============================
