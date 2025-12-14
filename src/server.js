@@ -18,10 +18,6 @@ app.use(express.json());
 // ===============================
 app.use("/dashboard", express.static("src/dashboard"));
 
-app.get("/dashboard", (req, res) => {
-  res.sendFile(path.resolve("src/dashboard/dashboard.html"));
-});
-
 app.get("/", (req, res) => {
   res.redirect("/dashboard/dashboard.html");
 });
