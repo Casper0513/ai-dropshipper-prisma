@@ -43,9 +43,13 @@ export async function syncAllVariants() {
       });
       await prisma.productLog.create({
         data: {
+          runId: autoSyncRun.id,
           asin: v.asin,
           title: "Unknown (deleted)",
+          oldPrice,
+          updatedPrice,
           stockStatus: "deleted",
+          profitAtSale,
         },
       });
       continue;
