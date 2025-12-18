@@ -13,7 +13,7 @@ RUN npm install
 # -------------------------
 # Copy dashboard FIRST
 # -------------------------
-COPY dashboard ./dashboard
+COPY src/dashboard ./dashboard
 
 # -------------------------
 # Build dashboard (Vite)
