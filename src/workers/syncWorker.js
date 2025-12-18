@@ -13,6 +13,16 @@ const PRICE_INCREASE_ALERT_THRESHOLD = Number(
   process.env.PRICE_INCREASE_ALERT_THRESHOLD || "0.15" // 15%
 );
 
+// Create or reuse a system auto-sync run
+const autoSyncRun = await prisma.run.create({
+  data: {
+    keyword: "__auto_sync__",
+    source: "system",
+    status: "running",
+    markupPercent: 0,
+  },
+});
+
 export async function syncAllVariants() {
   console.log("🔁 Starting variant-level auto-sync…");
 
