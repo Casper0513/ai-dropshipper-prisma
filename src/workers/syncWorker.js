@@ -84,6 +84,7 @@ export async function syncAllVariants() {
       await prisma.productLog.create({
         data: {
           asin: v.asin,
+          title: v.title || "Auto-sync update",
           oldPrice: old,
           updatedPrice: newPrice,
           stockStatus: inStock ? "in" : "out",
