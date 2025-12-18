@@ -121,12 +121,7 @@ app.get("/api/profit", async (req, res) => {
 });
 
 app.get("/api/autosync/status", (req, res) => {
-  res.json({
-    running: autoSyncStatus.running,
-    lastRunAt: autoSyncStatus.lastRunAt,
-    lastSuccessAt: autoSyncStatus.lastSuccessAt,
-    lastError: autoSyncStatus.lastError,
-  });
+  res.json(autoSyncStatus); 
 });
 
 // ===============================
