@@ -3,7 +3,7 @@ import cors from "cors";
 import path from "path";
 import { fileURLToPath } from "url";
 import { startAutoSync } from "./workers/autoSyncRunner.js";
-import { autoSyncStatus } from "./workers/autoSyncRunner.js";
+import { startAutoSync, autoSyncStatus } from "./workers/autoSyncRunner.js";
 
 
 // API imports
