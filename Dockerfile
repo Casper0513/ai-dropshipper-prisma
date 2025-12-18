@@ -12,7 +12,7 @@ COPY . .
 # Build dashboard
 WORKDIR /app/dashboard
 RUN npm install
-
+RUN npm run build
 
 # Generate Prisma client
 WORKDIR /app
