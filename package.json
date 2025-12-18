@@ -5,14 +5,7 @@
   "main": "src/index.js",
   "type": "module",
   "scripts": {
-    "start": "node src/server.js",
-    "import": "node cli.js",
-    "sync": "node cli.js",
-    "dev": "NODE_ENV=development node src/server.js",
-    "prisma:generate": "prisma generate",
-    "prisma:migrate-dev": "prisma migrate dev --name init",
-    "prisma:migrate-deploy": "prisma migrate deploy",
-    "prisma:studio": "prisma studio"
+    "start": "node src/server.js"
   },
   "dependencies": {
     "@prisma/client": "5.18.0",
@@ -20,18 +13,18 @@
     "cors": "^2.8.5",
     "dotenv": "^16.4.1",
     "express": "^4.19.0",
-    "nodemailer": "^6.9.14",
+    "nodemailer": "^7.0.11",
     "openai": "^4.0.0",
-    "p-limit": "^4.0.0"
+    "p-limit": "^4.0.0",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3"
   },
   "engines": {
     "node": "20.11.1"
   },
   "devDependencies": {
-    "prisma": "5.18.0"
-  },
-  "scripts": {
-    "start": "node src/server.js"
+    "@vitejs/plugin-react": "^5.1.2",
+    "prisma": "5.18.0",
+    "vite": "^7.3.0"
   }
 }
-
