@@ -1,39 +1,33 @@
 # =========================
-# 1️⃣ Build stage
+# Builder
 # =========================
-FROM node:18.20.4 AS builder
-
+FROM node:20.11.1 AS builder
 WORKDIR /app
 
-# Install deps
 COPY package.json ./
 RUN npm install
 
-# Copy full project
 COPY . .
 
-# Build dashboard with Vite
+# Build dashboard
 WORKDIR /app/dashboard
+RUN npm install
 RUN npm run build
 
-# Build Prisma client
+# Generate Prisma client
 WORKDIR /app
 RUN npx prisma generate
 
 # =========================
-# 2️⃣ Runtime stage
+# Runtime
 # =========================
-FROM node:18.20.4 AS runner
-
+FROM node:20.11.1
 WORKDIR /app
 
-# Copy runtime deps
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/package.json ./
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/src ./src
-
-# ✅ THIS is the important line
 COPY --from=builder /app/dashboard/dist ./dashboard/dist
 
 ENV NODE_ENV=production
