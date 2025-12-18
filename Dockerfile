@@ -4,6 +4,9 @@ WORKDIR /app/dashboard
 
 COPY package.json ./
 
+COPY --from=builder /app/dashboard/dist ./dashboard/dist
+
+
 RUN npm install
 
 COPY . .
