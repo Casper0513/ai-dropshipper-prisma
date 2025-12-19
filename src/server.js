@@ -9,19 +9,19 @@ import { importKeyword } from "./pipeline.js";
 import { prisma } from "./db/client.js";
 import { liveLogs } from "./utils/liveLogs.js";
 
-app.get("/api/logs/live", (req, res) => {
-  res.json({ logs: liveLogs });
-});
-
 const app = express();
-
-// ESM-safe __dirname
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+app.get("/api/logs/live", (req, res) => {
+  res.json({ status: "online" });
+});
+
+// ESM-safe __dirname
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // ===============================
 // DASHBOARD (Vite build output)
