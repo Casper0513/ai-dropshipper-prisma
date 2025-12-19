@@ -97,6 +97,7 @@ export async function syncAllVariants() {
 
       await prisma.productLog.create({
         data: {
+          runId: autoSyncRun.id,
           asin: v.asin,
           title: v.title || "Auto-sync update",
           oldPrice: old,
@@ -109,6 +110,11 @@ export async function syncAllVariants() {
       await prisma.syncedVariant.update({
         where: { id: v.id },
         data: { currentPrice: newPrice },
+      });
+
+      await prisma.run.update({
+       where: { id: autoSyncRun.id },
+       data: { status: "success" },
       });
 
       // 3) Email alert if price jumped
