@@ -84,10 +84,9 @@ export async function syncAllVariants() {
       const old = v.currentPrice ?? price;
       const newPrice = price;
 
-      console.log(
-        pushLog("🔁 Starting variant-level auto-sync…");
-        pushLog(`💲 Price change ${v.asin}: ${old} → ${newPrice}`);
-      );
+      
+      pushLog("[SYNC] Starting variant-level auto-sync...");
+      pushLog(`💲 Price change ${v.asin}: ${old} → ${newPrice}`);
 
       await updateShopifyPrice(
         v.shopifyProductId,
