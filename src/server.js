@@ -4,10 +4,14 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { startAutoSync, autoSyncStatus } from "./workers/autoSyncRunner.js";
 
-
 // API imports
 import { importKeyword } from "./pipeline.js";
 import { prisma } from "./db/client.js";
+import { liveLogs } from "./utils/liveLogs.js";
+
+app.get("/api/logs/live", (req, res) => {
+  res.json({ logs: liveLogs });
+});
 
 const app = express();
 
@@ -120,7 +124,12 @@ app.get("/api/profit", async (req, res) => {
 });
 
 app.get("/api/autosync/status", (req, res) => {
-  res.json(autoSyncStatus); 
+  res.json({
+   enabled: autoSyncStatus.enabled,
+   running: autoSyncStatus.running,
+   lastRun: autoSyncStatus.lastRun,
+   lastError: autoSyncStatus.lastError,
+  });
 });
 
 // ===============================
