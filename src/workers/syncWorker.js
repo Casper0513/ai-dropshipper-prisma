@@ -97,13 +97,13 @@ export async function syncAllVariants() {
 
       await prisma.productLog.create({
         data: {
-          runId: autoSyncRun.id,
-          asin: v.asin,
-          title: v.title || "Auto-sync update",
-          oldPrice: old,
-          updatedPrice: newPrice,
-          stockStatus: inStock ? "in" : "out",
-          profitAtSale: profit,
+         runId: autoSyncRun.id,
+         asin: v.asin,
+         title: "Auto-sync price update",
+         sourcePrice: old,       // ← map old price
+         finalPrice: newPrice,   // ← map new price
+         shopifyProductId: v.shopifyProductId ?? null,
+         shopifyHandle: v.shopifyHandle ?? null,
         },
       });
 
