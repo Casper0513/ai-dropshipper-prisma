@@ -4,27 +4,85 @@ import { CONFIG } from "../config.js";
 import { log } from "../utils/logger.js";
 import { prisma } from "../db/client.js";
 
-const SHOPIFY_API_VERSION = "2024-01";
+import {
+  getShopifyApiVersion,
+  getFallbackVersions,
+  isVersionError,
+} from "./shopifyApiVersion.js";
 
-const BASE_URL = `https://${CONFIG.shopify.domain}/admin/api/${SHOPIFY_API_VERSION}`;
-const HEADERS = {
-  "X-Shopify-Access-Token": CONFIG.shopify.token,
-  "Content-Type": "application/json",
-};
+// Common headers for Shopify REST Admin API calls
+function shopifyHeaders() {
+  return {
+    "X-Shopify-Access-Token": CONFIG.shopify.token,
+    "Content-Type": "application/json",
+  };
+}
+
+function buildBaseUrl(version) {
+  return `https://${CONFIG.shopify.domain}/admin/api/${version}`;
+}
 
 /**
- * Create a Shopify product (used by import pipeline)
+ * Generic request helper with:
+ * - Version fallback retry (handles deprecated/unsupported API version)
+ * - Clear logging when fallback happens
+ */
+async function requestWithVersionFallback({ method, path, data, params }) {
+  const primary = getShopifyApiVersion();
+  const versions = getFallbackVersions();
+
+  // Ensure primary is tried first even if user changes env var
+  const ordered = [primary, ...versions.filter((v) => v !== primary)];
+
+  let lastErr;
+
+  for (const version of ordered) {
+    try {
+      const base = buildBaseUrl(version);
+      const url = `${base}${path}`;
+
+      const res = await axios.request({
+        method,
+        url,
+        data,
+        params,
+        headers: shopifyHeaders(),
+        timeout: 30_000,
+      });
+
+      if (version !== primary) {
+        console.warn(
+          `⚠️ Shopify API version fallback in use: ${version} (primary was ${primary})`
+        );
+      }
+
+      return res;
+    } catch (err) {
+      lastErr = err;
+
+      // If it's NOT a version problem, don't retry versions
+      if (!isVersionError(err)) throw err;
+
+      console.warn(
+        `⚠️ Shopify API version ${version} rejected; trying next fallback...`
+      );
+    }
+  }
+
+  throw lastErr;
+}
+
+/**
+ * Create a Shopify product (used by your import pipeline)
  * ALSO registers the product variant for auto-sync
  */
 export async function createProduct(product, bodyHtml, keyword) {
-  const url = `${BASE_URL}/products.json`;
-
   const tags = [
     "ai-generated",
     "rapidapi-import",
     `keyword:${keyword}`,
     product.asin ? `asin:${product.asin}` : undefined,
-    "supplier:amazon",
+    `supplier:amazon`, // TODO: set dynamic later (amazon/aliexpress/walmart)
   ].filter(Boolean);
 
   const payload = {
@@ -47,10 +105,14 @@ export async function createProduct(product, bodyHtml, keyword) {
   };
 
   try {
-    const res = await axios.post(url, payload, { headers: HEADERS });
+    const res = await requestWithVersionFallback({
+      method: "POST",
+      path: "/products.json",
+      data: payload,
+    });
 
     const shopifyProduct = res.data.product;
-    const variant = shopifyProduct.variants?.[0];
+    const variant = shopifyProduct?.variants?.[0];
 
     log.success(
       `Created Shopify product #${shopifyProduct.id}: ${shopifyProduct.title}`
@@ -58,15 +120,29 @@ export async function createProduct(product, bodyHtml, keyword) {
 
     // ✅ Register variant for auto-sync
     if (variant) {
-      await prisma.syncedVariant.create({
-        data: {
+      // Avoid duplicate rows if you re-import same ASIN/variant
+      const shopifyVariantId = String(variant.id);
+
+      await prisma.syncedVariant.upsert({
+        where: { shopifyVariantId }, // requires unique in schema; if not unique, change to findFirst+create
+        update: {
+          asin: product.asin || null,
+          sku: variant.sku || null,
+          source: "amazon",
+          shopifyProductId: String(shopifyProduct.id),
+          currentPrice: Number(variant.price),
+          lastCostPrice: Number(product.price || variant.price || 0),
+          inStock: true,
+          deleted: false,
+        },
+        create: {
           asin: product.asin || null,
           sku: variant.sku || null,
           source: "amazon",
           shopifyProductId: String(shopifyProduct.id),
           shopifyVariantId: String(variant.id),
           currentPrice: Number(variant.price),
-          lastCostPrice: Number(product.price),
+          lastCostPrice: Number(product.price || variant.price || 0),
           inStock: true,
           deleted: false,
         },
@@ -75,29 +151,49 @@ export async function createProduct(product, bodyHtml, keyword) {
 
     return shopifyProduct;
   } catch (err) {
-    log.error(`Shopify error (createProduct): ${err.message}`);
+    log.error(
+      `Shopify error (createProduct): ${
+        err?.response?.data?.errors || err.message
+      }`
+    );
     return null;
   }
 }
 
 /**
- * List imported products (used for audits / discovery)
+ * List imported products (those tagged with "rapidapi-import").
+ * Used by sync system discovery / audits.
  */
 export async function listImportedProducts() {
-  const url = `${BASE_URL}/products.json?limit=250&status=any&fields=id,title,tags,variants,handle,status,product_type`;
-
   try {
-    const res = await axios.get(url, { headers: HEADERS });
+    const res = await requestWithVersionFallback({
+      method: "GET",
+      path: "/products.json",
+      params: {
+        limit: 250,
+        status: "any",
+        fields: "id,title,tags,variants,handle,status,product_type",
+      },
+    });
 
     const products = res.data.products || [];
 
-    return products.filter((p) =>
-      String(p.tags || "")
-        .toLowerCase()
-        .includes("rapidapi-import")
-    );
+    return products.filter((p) => {
+      if (!p.tags) return false;
+      if (Array.isArray(p.tags)) {
+        return p.tags.some(
+          (t) =>
+            typeof t === "string" && t.toLowerCase().includes("rapidapi-import")
+        );
+      }
+      return String(p.tags).toLowerCase().includes("rapidapi-import");
+    });
   } catch (err) {
-    log.error(`Shopify error (listImportedProducts): ${err.message}`);
+    log.error(
+      `Shopify error (listImportedProducts): ${
+        err?.response?.data?.errors || err.message
+      }`
+    );
     return [];
   }
 }
@@ -112,8 +208,6 @@ export async function updateProductStatusAndPrice(
   newPrice,
   inStock
 ) {
-  const url = `${BASE_URL}/products/${productId}.json`;
-
   const payload = {
     product: {
       id: productId,
@@ -121,15 +215,18 @@ export async function updateProductStatusAndPrice(
       variants: [
         {
           id: variantId,
-          price:
-            newPrice != null ? Number(newPrice).toFixed(2) : undefined,
+          price: newPrice != null ? Number(newPrice).toFixed(2) : undefined,
         },
       ],
     },
   };
 
   try {
-    const res = await axios.put(url, payload, { headers: HEADERS });
+    const res = await requestWithVersionFallback({
+      method: "PUT",
+      path: `/products/${productId}.json`,
+      data: payload,
+    });
 
     log.info(
       `Updated Shopify product #${productId} → price=${newPrice}, inStock=${inStock}`
@@ -137,7 +234,9 @@ export async function updateProductStatusAndPrice(
     return res.data.product;
   } catch (err) {
     log.error(
-      `Shopify error (updateProductStatusAndPrice #${productId}): ${err.message}`
+      `Shopify error (updateProductStatusAndPrice #${productId}): ${
+        err?.response?.data?.errors || err.message
+      }`
     );
     throw err;
   }
