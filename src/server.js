@@ -124,12 +124,8 @@ app.get("/api/profit", async (req, res) => {
 });
 
 app.get("/api/autosync/status", (req, res) => {
-  res.json({
-   enabled: autoSyncStatus.enabled,
-   running: autoSyncStatus.running,
-   lastRun: autoSyncStatus.lastRun,
-   lastError: autoSyncStatus.lastError,
-  });
+  res.set("Cache-Control", "no-store");
+  res.json(autoSyncStatus);
 });
 
 // ===============================
