@@ -6,19 +6,25 @@ import { prisma } from "../db/client.js";
 
 const SHOPIFY_API_VERSION = "2024-01";
 
+const BASE_URL = `https://${CONFIG.shopify.domain}/admin/api/${SHOPIFY_API_VERSION}`;
+const HEADERS = {
+  "X-Shopify-Access-Token": CONFIG.shopify.token,
+  "Content-Type": "application/json",
+};
+
 /**
- * Create a Shopify product (used by your import pipeline)
+ * Create a Shopify product (used by import pipeline)
  * ALSO registers the product variant for auto-sync
  */
 export async function createProduct(product, bodyHtml, keyword) {
-  const url = `https://${CONFIG.shopify.domain}/admin/api/2024-01/products.json`;
+  const url = `${BASE_URL}/products.json`;
 
   const tags = [
     "ai-generated",
     "rapidapi-import",
     `keyword:${keyword}`,
     product.asin ? `asin:${product.asin}` : undefined,
-    `supplier:amazon`, // default source (can be dynamic later)
+    "supplier:amazon",
   ].filter(Boolean);
 
   const payload = {
@@ -41,12 +47,7 @@ export async function createProduct(product, bodyHtml, keyword) {
   };
 
   try {
-    const res = await axios.post(url, payload, {
-      headers: {
-        "X-Shopify-Access-Token": CONFIG.shopify.token,
-        "Content-Type": "application/json",
-      },
-    });
+    const res = await axios.post(url, payload, { headers: HEADERS });
 
     const shopifyProduct = res.data.product;
     const variant = shopifyProduct.variants?.[0];
@@ -61,7 +62,7 @@ export async function createProduct(product, bodyHtml, keyword) {
         data: {
           asin: product.asin || null,
           sku: variant.sku || null,
-          source: "amazon", // future: amazon | aliexpress | walmart
+          source: "amazon",
           shopifyProductId: String(shopifyProduct.id),
           shopifyVariantId: String(variant.id),
           currentPrice: Number(variant.price),
@@ -80,35 +81,21 @@ export async function createProduct(product, bodyHtml, keyword) {
 }
 
 /**
- * List imported products (those tagged with "rapidapi-import").
- * Used by sync system discovery / audits.
+ * List imported products (used for audits / discovery)
  */
 export async function listImportedProducts() {
-  const url = `https://${CONFIG.shopify.domain}/admin/api/2024-01/products.json?limit=250&status=any&fields=id,title,tags,variants,handle,status,product_type`;
+  const url = `${BASE_URL}/products.json?limit=250&status=any&fields=id,title,tags,variants,handle,status,product_type`;
 
   try {
-    const res = await axios.get(url, {
-      headers: {
-        "X-Shopify-Access-Token": CONFIG.shopify.token,
-        "Content-Type": "application/json",
-      },
-    });
+    const res = await axios.get(url, { headers: HEADERS });
 
     const products = res.data.products || [];
 
-    return products.filter((p) => {
-      if (!p.tags) return false;
-      if (Array.isArray(p.tags)) {
-        return p.tags.some(
-          (t) =>
-            typeof t === "string" &&
-            t.toLowerCase().includes("rapidapi-import")
-        );
-      }
-      return String(p.tags)
+    return products.filter((p) =>
+      String(p.tags || "")
         .toLowerCase()
-        .includes("rapidapi-import");
-    });
+        .includes("rapidapi-import")
+    );
   } catch (err) {
     log.error(`Shopify error (listImportedProducts): ${err.message}`);
     return [];
@@ -125,7 +112,7 @@ export async function updateProductStatusAndPrice(
   newPrice,
   inStock
 ) {
-  const url = `https://${CONFIG.shopify.domain}/admin/api/2024-01/products/${productId}.json`;
+  const url = `${BASE_URL}/products/${productId}.json`;
 
   const payload = {
     product: {
@@ -142,12 +129,7 @@ export async function updateProductStatusAndPrice(
   };
 
   try {
-    const res = await axios.put(url, payload, {
-      headers: {
-        "X-Shopify-Access-Token": CONFIG.shopify.token,
-        "Content-Type": "application/json",
-      },
-    });
+    const res = await axios.put(url, payload, { headers: HEADERS });
 
     log.info(
       `Updated Shopify product #${productId} → price=${newPrice}, inStock=${inStock}`
