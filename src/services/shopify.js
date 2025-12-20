@@ -4,12 +4,14 @@ import { CONFIG } from "../config.js";
 import { log } from "../utils/logger.js";
 import { prisma } from "../db/client.js";
 
+const SHOPIFY_API_VERSION = "2024-01";
+
 /**
  * Create a Shopify product (used by your import pipeline)
  * ALSO registers the product variant for auto-sync
  */
 export async function createProduct(product, bodyHtml, keyword) {
-  const url = `https://${CONFIG.shopify.domain}/admin/api/2025-10/products.json`;
+  const url = `https://${CONFIG.shopify.domain}/admin/api/2024-01/products.json`;
 
   const tags = [
     "ai-generated",
@@ -82,7 +84,7 @@ export async function createProduct(product, bodyHtml, keyword) {
  * Used by sync system discovery / audits.
  */
 export async function listImportedProducts() {
-  const url = `https://${CONFIG.shopify.domain}/admin/api/2025-10/products.json?limit=250&status=any&fields=id,title,tags,variants,handle,status,product_type`;
+  const url = `https://${CONFIG.shopify.domain}/admin/api/2024-01/products.json?limit=250&status=any&fields=id,title,tags,variants,handle,status,product_type`;
 
   try {
     const res = await axios.get(url, {
@@ -123,7 +125,7 @@ export async function updateProductStatusAndPrice(
   newPrice,
   inStock
 ) {
-  const url = `https://${CONFIG.shopify.domain}/admin/api/2025-10/products/${productId}.json`;
+  const url = `https://${CONFIG.shopify.domain}/admin/api/2024-01/products/${productId}.json`;
 
   const payload = {
     product: {
