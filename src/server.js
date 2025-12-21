@@ -7,7 +7,8 @@ import { startAutoSync, autoSyncStatus } from "./workers/autoSyncRunner.js";
 // API imports
 import { importKeyword } from "./pipeline.js";
 import { prisma } from "./db/client.js";
-import { liveLogs } from "./utils/liveLogs.js";
+import { attachListener } from "./utils/liveLogs.js";
+
 
 const app = express();
 
@@ -16,7 +17,7 @@ app.use(cors());
 app.use(express.json());
 
 app.get("/api/logs/live", (req, res) => {
-  res.json({ status: "online" });
+  attachListener(res);
 });
 
 // ESM-safe __dirname
