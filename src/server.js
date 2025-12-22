@@ -17,7 +17,19 @@ app.use(cors());
 app.use(express.json());
 
 app.get("/api/logs/live", (req, res) => {
-  attachListener(res);
+res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+
+  const send = (msg) => {
+    res.write(`data: ${msg}\n\n`);
+  };
+
+  liveLogs.subscribe(send);
+
+  req.on("close", () => {
+    liveLogs.unsubscribe(send);
+  });
 });
 
 // ESM-safe __dirname
