@@ -7,7 +7,7 @@ import { startAutoSync, autoSyncStatus } from "./workers/autoSyncRunner.js";
 // API imports
 import { importKeyword } from "./pipeline.js";
 import { prisma } from "./db/client.js";
-import { attachListener } from "./utils/liveLogs.js";
+import { attachLiveLogs } from "./utils/liveLogs.js";
 
 
 const app = express();
@@ -15,6 +15,9 @@ const app = express();
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// ✅ Attach SSE live logs endpoint
+attachLiveLogs(app);
 
 app.get("/api/logs/live", (req, res) => {
 res.setHeader("Content-Type", "text/event-stream");

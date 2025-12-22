@@ -1,36 +1,38 @@
 // src/utils/liveLogs.js
-let listeners = [];
-let buffer = [];
 
-export function pushLog(message) {
-  const entry = {
-    ts: new Date().toISOString(),
-    message
-  };
+let clients = [];
 
-  buffer.push(entry);
-  buffer = buffer.slice(-200); // keep last 200 logs
+/**
+ * Attach SSE endpoint to Express app
+ */
+export function attachLiveLogs(app) {
+  app.get("/api/logs/live", (req, res) => {
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.flushHeaders?.();
 
-  listeners.forEach(res => {
-    res.write(`data: ${JSON.stringify(entry)}\n\n`);
+    const clientId = Date.now();
+    const client = { id: clientId, res };
+    clients.push(client);
+
+    // Initial message
+    res.write(`data: 🟢 Connected to live logs\n\n`);
+
+    req.on("close", () => {
+      clients = clients.filter((c) => c.id !== clientId);
+    });
   });
 }
 
-export function attachListener(res) {
-  res.writeHead(200, {
-    "Content-Type": "text/event-stream",
-    "Cache-Control": "no-cache",
-    Connection: "keep-alive",
-  });
+/**
+ * Push a log line to all connected clients
+ */
+export function pushLiveLog(message) {
+  const line =
+    typeof message === "string" ? message : JSON.stringify(message);
 
-  buffer.forEach(entry => {
-    res.write(`data: ${JSON.stringify(entry)}\n\n`);
-  });
-
-  listeners.push(res);
-
-  res.on("close", () => {
-    listeners = listeners.filter(l => l !== res);
-  });
+  for (const client of clients) {
+    client.res.write(`data: ${line}\n\n`);
+  }
 }
-
