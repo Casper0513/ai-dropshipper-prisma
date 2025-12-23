@@ -8,7 +8,7 @@ import {
   deleteShopifyProduct,
 } from "../services/shopifySync.js";
 import { sendPriceIncreaseAlert } from "../services/notify.js";
-import { pushLog } from "../utils/liveLogs.js";
+import { pushLiveLog } from "../utils/liveLogs.js";
 
 
 const PRICE_INCREASE_ALERT_THRESHOLD = Number(
@@ -85,8 +85,8 @@ export async function syncAllVariants() {
       const newPrice = price;
 
       
-      pushLog("[SYNC] Starting variant-level auto-sync...");
-      pushLog(`💲 Price change ${v.asin}: ${old} → ${newPrice}`);
+      pushLiveLog("[SYNC] Starting variant-level auto-sync...");
+      pushLiveLog(`💲 Price change ${v.asin}: ${old} → ${newPrice}`);
 
       await updateShopifyPrice(
         v.shopifyProductId,
