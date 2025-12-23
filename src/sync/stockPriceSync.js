@@ -82,7 +82,7 @@ export async function runFullSync() {
       }
 
       const currentPrice = parseFloat(variant.price);
-      const priceChanged =
+      const updatedPrice =
         !Number.isFinite(currentPrice) ||
         Math.abs(currentPrice - supplierPrice) >= 0.01;
 
@@ -95,7 +95,7 @@ export async function runFullSync() {
       await updateProductStatusAndPrice(
         p.id,
         variant.id,
-        supplierPrice,
+        updatedPrice,
         inStock
       );
 
@@ -109,7 +109,7 @@ export async function runFullSync() {
             asin: asin || null,
             title: p.title,
             sourcePrice: supplierPrice ?? null,
-            finalPrice: currentPrice ?? null,
+            finalPrice: updatedPrice ?? null,
             currency,
             shopifyProductId: String(p.id),
             shopifyHandle: p.handle || null
