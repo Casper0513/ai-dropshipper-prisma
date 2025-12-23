@@ -2,7 +2,7 @@ import express from "express";
 import cors from "cors";
 import path from "path";
 import { fileURLToPath } from "url";
-import { startAutoSync, autoSyncStatus } from "./workers/autoSyncRunner.js";
+import { startAutoSync, getAutoSyncStatus } from "./workers/autoSyncRunner.js";
 
 // API imports
 import { importKeyword } from "./pipeline.js";
@@ -140,8 +140,7 @@ app.get("/api/profit", async (req, res) => {
 });
 
 app.get("/api/autosync/status", (req, res) => {
-  res.set("Cache-Control", "no-store");
-  res.json(autoSyncStatus);
+  res.json(getAutoSyncStatus);
 });
 
 // ===============================
