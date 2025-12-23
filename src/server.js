@@ -115,6 +115,13 @@ app.get("/api/status/sources", async (req, res) => {
 });
 
 app.get("/api/profit", async (req, res) => {
+  res.set({
+    "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+    Pragma: "no-cache",
+    Expires: "0",
+    "Surrogate-Control": "no-store",
+  });
+  
   const products = await prisma.productLog.findMany({
     where: {
       finalPrice: { not: null },
