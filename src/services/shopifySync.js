@@ -13,19 +13,26 @@ const HEADERS = {
 
 /**
  * Update variant price
+ * ⚠️ Shopify REQUIRES updating variants via the PRODUCT endpoint
  */
 export async function updateShopifyPrice(productId, variantId, newPrice) {
   try {
     await axios.put(
-      `${BASE_URL}/variants/${variantId}.json`,
+      `${BASE_URL}/products/${productId}.json`,
       {
-        variant: {
-          id: variantId,
-          price: newPrice.toFixed(2),
+        product: {
+          id: productId,
+          variants: [
+            {
+              id: variantId,
+              price: Number(newPrice).toFixed(2),
+            },
+          ],
         },
       },
       { headers: HEADERS }
     );
+
     return true;
   } catch (err) {
     console.error(
@@ -79,4 +86,3 @@ export async function deleteShopifyProduct(productId) {
     return false;
   }
 }
-
