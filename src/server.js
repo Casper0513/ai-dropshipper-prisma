@@ -22,7 +22,6 @@ app.use(express.json());
 import crypto from "crypto";
 import { routeFulfillment } from "./services/fulfillmentRouter.js";
 import { submitCJOrder } from "./services/cj.js";
-import { prisma } from "./db/client.js";
 
 function verifyShopifyWebhook(req, rawBody) {
   const hmac = req.headers["x-shopify-hmac-sha256"];
