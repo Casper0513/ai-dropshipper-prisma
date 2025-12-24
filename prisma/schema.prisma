@@ -7,6 +7,30 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+//////////////////////
+// ENUMS (NEW)
+//////////////////////
+
+enum Supplier {
+  amazon
+  aliexpress
+  walmart
+  cj
+  system
+}
+
+enum FulfillmentStatus {
+  pending
+  ordered
+  shipped
+  delivered
+  failed
+}
+
+//////////////////////
+// RUNS (UNCHANGED)
+//////////////////////
+
 model Run {
   id            Int          @id @default(autoincrement())
   keyword       String
@@ -21,40 +45,92 @@ model Run {
   products      ProductLog[]
 }
 
+//////////////////////
+// PRODUCT LOGS
+// (extended, backward-compatible)
+//////////////////////
+
 model ProductLog {
   id               Int      @id @default(autoincrement())
+
   run              Run      @relation(fields: [runId], references: [id], onDelete: Cascade)
   runId            Int
 
   asin             String?
   title            String
+
+  // Pricing (already used by dashboard + sync)
   sourcePrice      Float?
   finalPrice       Float?
   currency         String   @default("USD")
+
+  // Shopify references
   shopifyProductId String?
   shopifyHandle    String?
 
+  // Optional profit tracking (safe add)
+  profitAtSale     Float?
+
   createdAt        DateTime @default(now())
 }
+
+//////////////////////
+// SYNCED VARIANTS
+// (CJ + Auto-Sync READY)
+//////////////////////
 
 model SyncedVariant {
   id               Int      @id @default(autoincrement())
 
-  asin             String?
-  sku              String?
+  // Supplier identifiers
+  asin             String?          // Amazon
+  sku              String?          // AliExpress / CJ
 
-  source           String   // amazon | aliexpress | walmart
+  // Supplier source
+  source           Supplier         // amazon | aliexpress | walmart | cj
 
+  // Shopify mapping
   shopifyProductId String
   shopifyVariantId String
+  shopifyHandle    String?
 
+  // Pricing
   currentPrice     Float?
   lastCostPrice    Float?
 
+  // Dropshipping-safe stock
   inStock          Boolean  @default(true)
   deleted          Boolean  @default(false)
+
+  // CJ-specific (optional, safe)
+  cjProductId       String?
+  cjVariantId       String?
+  fulfillmentStatus FulfillmentStatus?
 
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 }
+
+//////////////////////
+// SHOPIFY → CJ ORDERS
+// (NEW – FUTURE FULFILLMENT)
+//////////////////////
+
+model FulfillmentOrder {
+  id                Int      @id @default(autoincrement())
+
+  shopifyOrderId    String   @unique
+  shopifyLineItemId String
+
+  supplier          Supplier
+
+  cjOrderId         String?
+  cjTrackingNumber  String?
+
+  status            FulfillmentStatus @default(pending)
+
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
 
