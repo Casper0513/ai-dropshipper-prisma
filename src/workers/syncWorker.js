@@ -10,137 +10,179 @@ import {
 import { sendPriceIncreaseAlert } from "../services/notify.js";
 import { pushLiveLog } from "../utils/liveLogs.js";
 
-
 const PRICE_INCREASE_ALERT_THRESHOLD = Number(
-  process.env.PRICE_INCREASE_ALERT_THRESHOLD || "0.15" // 15%
+  process.env.PRICE_INCREASE_ALERT_THRESHOLD || "0.15"
 );
 
-// Create or reuse a system auto-sync run
-const autoSyncRun = await prisma.run.create({
-  data: {
-    keyword: "__auto_sync__",
-    source: "system",
-    status: "running",
-    markupPercent: 0,
-  },
-});
-
+/**
+ * Variant-level auto-sync
+ * - SAFE for dropshipping
+ * - Stock = product status (active/draft)
+ * - Inventory quantity is NOT used
+ */
 export async function syncAllVariants() {
-  console.log("🔁 Starting variant-level auto-sync…");
+  pushLiveLog("🔁 Starting variant-level auto-sync…");
 
-  const variants = await prisma.syncedVariant.findMany({
-    where: { deleted: false },
+  // ✅ Create a run INSIDE the function (no top-level await)
+  const autoSyncRun = await prisma.run.create({
+    data: {
+      keyword: "__auto_sync__",
+      source: "system",
+      status: "running",
+      markupPercent: 0,
+    },
   });
 
-  for (const v of variants) {
-    const details = await fetchBestSourceDetails(v);
+  try {
+    const variants = await prisma.syncedVariant.findMany({
+      where: { deleted: false },
+    });
 
-    // If no details found → product probably gone → delete
-    if (!details) {
-      console.log(`❌ No details for ${v.asin || v.sku} → deleting Shopify product`);
-      await deleteShopifyProduct(v.shopifyProductId);
-      await prisma.syncedVariant.update({
-        where: { id: v.id },
-        data: { deleted: true, inStock: false },
-      });
-      await prisma.productLog.create({
-        data: {
-          runId: autoSyncRun.id,
-          asin: v.asin,
-          title: "Unknown (deleted)",
-          oldPrice,
-          updatedPrice,
-          stockStatus: "deleted",
-          profitAtSale,
-        },
-      });
-      continue;
-    }
+    for (const v of variants) {
+      const details = await fetchBestSourceDetails(v);
 
-    const { price, inStock } = details;
+      /**
+       * ❌ Product no longer exists at supplier
+       */
+      if (!details) {
+        pushLiveLog(`❌ No supplier data → deleting ${v.asin || v.sku}`);
 
-    // 1) Stock sync
-    if (inStock !== v.inStock) {
-      console.log(
-        `📦 Stock change ${v.asin || v.sku}: ${v.inStock ? "IN" : "OUT"} → ${
-          inStock ? "IN" : "OUT"
-        }`
-      );
-      await setShopifyInStock(v.shopifyProductId, v.shopifyVariantId, inStock);
-      await prisma.syncedVariant.update({
-        where: { id: v.id },
-        data: { inStock },
-      });
-      await prisma.productLog.create({
-        data: {
-          asin: v.asin,
-          stockStatus: inStock ? "in" : "out",
-        },
-      });
-    }
+        await deleteShopifyProduct(v.shopifyProductId);
 
-    // 2) Price sync + profit tracking
-    if (price && price > 0 && price !== v.currentPrice) {
-      const old = v.currentPrice ?? price;
-      const newPrice = price;
+        await prisma.syncedVariant.update({
+          where: { id: v.id },
+          data: { deleted: true, inStock: false },
+        });
 
-      
-      pushLiveLog("[SYNC] Starting variant-level auto-sync...");
-      pushLiveLog(`💲 Price change ${v.asin}: ${old} → ${newPrice}`);
-
-      await updateShopifyPrice(
-        v.shopifyProductId,
-        v.shopifyVariantId,
-        newPrice
-      );
-
-      const lastCost = v.lastCostPrice ?? newPrice;
-      const profit = newPrice - lastCost;
-
-      await prisma.productLog.create({
-        data: {
-         runId: autoSyncRun.id,
-         asin: v.asin,
-         title: "Auto-sync price update",
-         sourcePrice: old,       // ← map old price
-         finalPrice: newPrice,   // ← map new price
-         shopifyProductId: v.shopifyProductId ?? null,
-         shopifyHandle: v.shopifyHandle ?? null,
-        },
-      });
-
-      await prisma.syncedVariant.update({
-        where: { id: v.id },
-        data: { currentPrice: newPrice },
-      });
-
-      await prisma.run.update({
-       where: { id: autoSyncRun.id },
-       data: { status: "success" },
-      });
-
-      // 3) Email alert if price jumped
-      if (newPrice > old) {
-        const changeRatio = (newPrice - old) / old;
-        if (changeRatio >= PRICE_INCREASE_ALERT_THRESHOLD) {
-          await sendPriceIncreaseAlert({
+        await prisma.productLog.create({
+          data: {
+            runId: autoSyncRun.id,
             asin: v.asin,
-            oldPrice: old,
-            newPrice,
-            ratio: changeRatio,
-          });
+            title: "Supplier removed product",
+            stockStatus: "deleted",
+            shopifyProductId: v.shopifyProductId ?? null,
+          },
+        });
+
+        continue;
+      }
+
+      const { price, inStock } = details;
+
+      /**
+       * 📦 STOCK SYNC (dropshipping-safe)
+       * - We NEVER touch inventory quantity
+       * - We toggle Shopify product status only
+       */
+      if (inStock !== v.inStock) {
+        pushLiveLog(
+          `📦 Stock change ${v.asin || v.sku}: ${
+            v.inStock ? "IN" : "OUT"
+          } → ${inStock ? "IN" : "OUT"}`
+        );
+
+        await setShopifyInStock(
+          v.shopifyProductId,
+          v.shopifyVariantId,
+          inStock
+        );
+
+        await prisma.syncedVariant.update({
+          where: { id: v.id },
+          data: { inStock },
+        });
+
+        await prisma.productLog.create({
+          data: {
+            runId: autoSyncRun.id,
+            asin: v.asin,
+            title: "Stock status update",
+            stockStatus: inStock ? "in" : "out",
+            shopifyProductId: v.shopifyProductId ?? null,
+          },
+        });
+      }
+
+      /**
+       * 💲 PRICE SYNC
+       */
+      if (price && price > 0 && price !== v.currentPrice) {
+        const oldPrice = v.currentPrice ?? price;
+        const newPrice = price;
+
+        pushLiveLog(
+          `💲 Price change ${v.asin || v.sku}: ${oldPrice} → ${newPrice}`
+        );
+
+        const updated = await updateShopifyPrice(
+          v.shopifyProductId,
+          v.shopifyVariantId,
+          newPrice
+        );
+
+        if (!updated) continue;
+
+        const lastCost = v.lastCostPrice ?? newPrice;
+        const profit = newPrice - lastCost;
+
+        await prisma.productLog.create({
+          data: {
+            runId: autoSyncRun.id,
+            asin: v.asin,
+            title: "Auto-sync price update",
+            sourcePrice: oldPrice,
+            finalPrice: newPrice,
+            profitAtSale: profit,
+            shopifyProductId: v.shopifyProductId ?? null,
+            shopifyHandle: v.shopifyHandle ?? null,
+          },
+        });
+
+        await prisma.syncedVariant.update({
+          where: { id: v.id },
+          data: { currentPrice: newPrice },
+        });
+
+        /**
+         * 🚨 PRICE INCREASE ALERT
+         */
+        if (newPrice > oldPrice) {
+          const ratio = (newPrice - oldPrice) / oldPrice;
+          if (ratio >= PRICE_INCREASE_ALERT_THRESHOLD) {
+            await sendPriceIncreaseAlert({
+              asin: v.asin,
+              oldPrice,
+              newPrice,
+              ratio,
+            });
+          }
         }
       }
     }
-  }
 
-  console.log("✅ Variant-level auto-sync complete.");
+    await prisma.run.update({
+      where: { id: autoSyncRun.id },
+      data: { status: "success" },
+    });
+
+    pushLiveLog("✅ Variant-level auto-sync complete.");
+  } catch (err) {
+    await prisma.run.update({
+      where: { id: autoSyncRun.id },
+      data: { status: "error" },
+    });
+
+    pushLiveLog(`❌ Auto-sync failed: ${err.message}`);
+    throw err;
+  }
 }
 
-// Allow running as a script: node src/workers/syncWorker.js
+/**
+ * Allow manual execution:
+ * node src/workers/syncWorker.js
+ */
 if (import.meta.url === `file://${process.argv[1]}`) {
-  syncAllVariants().catch(err => {
-    console.error("Sync failed:", err);
-    process.exit(1);
-  });
+  syncAllVariants()
+    .then(() => process.exit(0))
+    .catch(() => process.exit(1));
 }

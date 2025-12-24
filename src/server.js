@@ -16,6 +16,61 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// ===============================
+// SHOPIFY WEBHOOK — ORDERS PAID
+// ===============================
+import crypto from "crypto";
+import { routeFulfillment } from "./services/fulfillmentRouter.js";
+import { submitCJOrder } from "./services/cj.js";
+import { prisma } from "./db/client.js";
+
+function verifyShopifyWebhook(req, rawBody) {
+  const hmac = req.headers["x-shopify-hmac-sha256"];
+  const digest = crypto
+    .createHmac("sha256", CONFIG.shopify.webhookSecret)
+    .update(rawBody)
+    .digest("base64");
+  return digest === hmac;
+}
+
+app.post(
+  "/api/webhooks/shopify/orders-paid",
+  express.raw({ type: "application/json" }),
+  async (req, res) => {
+    const rawBody = req.body.toString();
+
+    if (!verifyShopifyWebhook(req, rawBody)) {
+      return res.status(401).send("Invalid webhook");
+    }
+
+    const order = JSON.parse(rawBody);
+
+    const routes = await routeFulfillment(order);
+
+    for (const r of routes) {
+      await prisma.fulfillmentOrder.create({
+        data: {
+          shopifyOrderId: String(order.id),
+          supplier: r.supplier,
+          status:
+            r.supplier === "cj" && r.fulfillmentMode === "auto"
+              ? "submitted"
+              : "pending",
+        },
+      });
+
+      if (r.supplier === "cj" && r.fulfillmentMode === "auto") {
+        await submitCJOrder({
+          order,
+          lineItems: order.line_items,
+        });
+      }
+    }
+
+    res.sendStatus(200);
+  }
+);
+
 // ✅ Attach SSE live logs endpoint
 attachLiveLogs(app);
 
