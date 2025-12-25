@@ -1,121 +1,120 @@
 import express from "express";
+// src/server.js
+import express from "express";
 import cors from "cors";
+import crypto from "crypto";
 import path from "path";
 import { fileURLToPath } from "url";
-import { startAutoSync, getAutoSyncStatus } from "./workers/autoSyncRunner.js";
 
-// API imports
-import { importKeyword } from "./pipeline.js";
 import { prisma } from "./db/client.js";
+import { CONFIG } from "./config.js";
+
+import { importKeyword } from "./pipeline.js";
+import { startAutoSync, autoSyncStatus } from "./workers/autoSyncRunner.js";
+
 import { attachLiveLogs } from "./utils/liveLogs.js";
-
-
-const app = express();
-
-// Middleware
-app.use(cors());
-app.use(express.json());
-
-// ===============================
-// SHOPIFY WEBHOOK — ORDERS PAID
-// ===============================
-import crypto from "crypto";
 import { routeFulfillment } from "./services/fulfillmentRouter.js";
 import { submitCJOrder } from "./services/cj.js";
 
+// --------------------------------
+// App bootstrap
+// --------------------------------
+const app = express();
+
+// Shopify webhooks MUST use raw body
+app.use(
+  "/api/webhooks",
+  express.raw({ type: "application/json" })
+);
+
+// Normal JSON everywhere else
+app.use(express.json());
+app.use(cors());
+
+// --------------------------------
+// Shopify webhook verification
+// --------------------------------
 function verifyShopifyWebhook(req, rawBody) {
   const hmac = req.headers["x-shopify-hmac-sha256"];
   const digest = crypto
     .createHmac("sha256", CONFIG.shopify.webhookSecret)
     .update(rawBody)
     .digest("base64");
+
   return digest === hmac;
 }
 
-app.post(
-  "/api/webhooks/shopify/orders-paid",
-  express.raw({ type: "application/json" }),
-  async (req, res) => {
-    const rawBody = req.body.toString();
+// --------------------------------
+// SHOPIFY WEBHOOK — ORDERS PAID
+// --------------------------------
+app.post("/api/webhooks/shopify/orders-paid", async (req, res) => {
+  const rawBody = req.body.toString();
 
-    if (!verifyShopifyWebhook(req, rawBody)) {
-      return res.status(401).send("Invalid webhook");
-    }
-
-    const order = JSON.parse(rawBody);
-
-    const routes = await routeFulfillment(order);
-
-    for (const r of routes) {
-      await prisma.fulfillmentOrder.create({
-        data: {
-          shopifyOrderId: String(order.id),
-          supplier: r.supplier,
-          status:
-            r.supplier === "cj" && r.fulfillmentMode === "auto"
-              ? "submitted"
-              : "pending",
-        },
-      });
-
-      if (r.supplier === "cj" && r.fulfillmentMode === "auto") {
-        await submitCJOrder({
-          order,
-          lineItems: order.line_items,
-        });
-      }
-    }
-
-    res.sendStatus(200);
+  if (!verifyShopifyWebhook(req, rawBody)) {
+    return res.status(401).send("Invalid webhook");
   }
-);
 
-// ✅ Attach SSE live logs endpoint
-attachLiveLogs(app);
+  const order = JSON.parse(rawBody);
 
-app.get("/api/logs/live", (req, res) => {
-res.setHeader("Content-Type", "text/event-stream");
-  res.setHeader("Cache-Control", "no-cache");
-  res.setHeader("Connection", "keep-alive");
+  const routes = await routeFulfillment(order);
 
-  const send = (msg) => {
-    res.write(`data: ${msg}\n\n`);
-  };
+  for (const r of routes) {
+    await prisma.fulfillmentOrder.create({
+      data: {
+        shopifyOrderId: String(order.id),
+        shopifyLineItemId: String(r.lineItemId),
+        supplier: r.supplier,
+        status:
+          r.supplier === "cj" && r.fulfillmentMode === "auto"
+            ? "ordered"
+            : "pending",
+      },
+    });
 
-  liveLogs.subscribe(send);
+    if (r.supplier === "cj" && r.fulfillmentMode === "auto") {
+      await submitCJOrder({
+        order,
+        lineItems: order.line_items,
+      });
+    }
+  }
 
-  req.on("close", () => {
-    liveLogs.unsubscribe(send);
-  });
+  res.sendStatus(200);
 });
 
-// ESM-safe __dirname
+// --------------------------------
+// Live logs (SSE)
+// --------------------------------
+attachLiveLogs(app);
+
+// --------------------------------
+// Paths (ESM safe)
+// --------------------------------
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// ===============================
-// DASHBOARD (Vite build output)
-// ===============================
+// --------------------------------
+// Dashboard (Vite build)
+// --------------------------------
 const dashboardDist = path.join(__dirname, "../dashboard/dist");
 
 app.use("/dashboard", express.static(dashboardDist));
 
-app.get("/dashboard", (req, res) => {
+app.get("/dashboard", (_, res) => {
   res.sendFile(path.join(dashboardDist, "index.html"));
 });
 
-// Root redirect
-app.get("/", (req, res) => {
-  res.redirect("/dashboard");
-});
+app.get("/", (_, res) => res.redirect("/dashboard"));
 
-// ===============================
-// API — IMPORT PRODUCTS
-// ===============================
+// --------------------------------
+// API — IMPORT
+// --------------------------------
 app.post("/api/import", async (req, res) => {
   try {
     const { keyword, mode, markupPercent, source } = req.body;
-    if (!keyword) return res.status(400).json({ error: "Missing keyword" });
+    if (!keyword) {
+      return res.status(400).json({ error: "Missing keyword" });
+    }
 
     const result = await importKeyword(keyword, {
       mode,
@@ -130,10 +129,10 @@ app.post("/api/import", async (req, res) => {
   }
 });
 
-// ===============================
+// --------------------------------
 // API — DASHBOARD DATA
-// ===============================
-app.get("/api/stats", async (req, res) => {
+// --------------------------------
+app.get("/api/stats", async (_, res) => {
   const [totalRuns, totalImported] = await Promise.all([
     prisma.run.count(),
     prisma.productLog.count(),
@@ -150,7 +149,7 @@ app.get("/api/stats", async (req, res) => {
   });
 });
 
-app.get("/api/runs", async (req, res) => {
+app.get("/api/runs", async (_, res) => {
   const runs = await prisma.run.findMany({
     orderBy: { startedAt: "desc" },
     take: 25,
@@ -158,24 +157,24 @@ app.get("/api/runs", async (req, res) => {
   res.json(runs);
 });
 
-app.get("/api/status/sources", async (req, res) => {
+app.get("/api/status/sources", (_, res) => {
   res.json({
     sources: [
       { name: "Amazon", status: "ok", lastSync: new Date(), message: "Operational" },
       { name: "AliExpress", status: "ok", lastSync: new Date(), message: "Operational" },
-      { name: "Walmart", status: "ok", lastSync: new Date(), message: "Operational" },
+      { name: "Walmart", status: "ok", lastSync: "—", message: "Not active" },
+      { name: "CJ Dropshipping", status: "ok", lastSync: new Date(), message: "Connected" },
     ],
   });
 });
 
-app.get("/api/profit", async (req, res) => {
+app.get("/api/profit", async (_, res) => {
   res.set({
-    "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+    "Cache-Control": "no-store",
     Pragma: "no-cache",
     Expires: "0",
-    "Surrogate-Control": "no-store",
   });
-  
+
   const products = await prisma.productLog.findMany({
     where: {
       finalPrice: { not: null },
@@ -200,14 +199,25 @@ app.get("/api/profit", async (req, res) => {
   });
 });
 
-app.get("/api/autosync/status", (req, res) => {
-  res.json(getAutoSyncStatus);
+// --------------------------------
+// AUTO-SYNC STATUS (FIXED)
+// --------------------------------
+app.get("/api/autosync/status", (_, res) => {
+  res.json({
+    enabled: true,
+    running: autoSyncStatus.running,
+    lastRunAt: autoSyncStatus.lastRunAt,
+    lastSuccessAt: autoSyncStatus.lastSuccessAt,
+    lastError: autoSyncStatus.lastError,
+    lastResult: autoSyncStatus.lastError ? "error" : "success",
+  });
 });
 
-// ===============================
+// --------------------------------
 // START SERVER
-// ===============================
+// --------------------------------
 const PORT = process.env.PORT || 3000;
+
 app.listen(PORT, () => {
   startAutoSync();
   console.log("✅ Server running on port", PORT);
