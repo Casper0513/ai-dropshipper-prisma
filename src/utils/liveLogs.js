@@ -43,15 +43,3 @@ export function pushLiveLog(message) {
   }
 }
 
-
-/**
- * Push a log line to all connected clients
- */
-export function pushLiveLog(message) {
-  const line =
-    typeof message === "string" ? message : JSON.stringify(message);
-
-  for (const client of clients) {
-    client.res.write(`data: ${line}\n\n`);
-  }
-}
