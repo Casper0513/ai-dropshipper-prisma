@@ -30,6 +30,25 @@ export function attachLiveLogs(app) {
  */
 export function pushLiveLog(message) {
   const line =
+    typeof message === "string"
+      ? message
+      : JSON.stringify(message);
+
+  for (const c of clients) {
+    try {
+      c.res.write(`data: ${line}\n\n`);
+    } catch {
+      // Drop broken connections silently
+    }
+  }
+}
+
+
+/**
+ * Push a log line to all connected clients
+ */
+export function pushLiveLog(message) {
+  const line =
     typeof message === "string" ? message : JSON.stringify(message);
 
   for (const client of clients) {

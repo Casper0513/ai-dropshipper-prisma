@@ -1,4 +1,3 @@
-import express from "express";
 // src/server.js
 import express from "express";
 import cors from "cors";
@@ -8,28 +7,26 @@ import { fileURLToPath } from "url";
 
 import { prisma } from "./db/client.js";
 import { CONFIG } from "./config.js";
-
 import { importKeyword } from "./pipeline.js";
-import { startAutoSync, autoSyncStatus } from "./workers/autoSyncRunner.js";
 
+import { startAutoSync, getAutoSyncStatus } from "./workers/autoSyncRunner.js";
 import { attachLiveLogs } from "./utils/liveLogs.js";
+
 import { routeFulfillment } from "./services/fulfillmentRouter.js";
-import { submitCJOrder } from "./services/cj.js";
+import { createCjOrderFromFulfillmentOrder } from "./services/cjFulfillment.js";
+
+import { startTrackingSyncWorker } from "./workers/trackingSyncWorker.js";
 
 // --------------------------------
 // App bootstrap
 // --------------------------------
 const app = express();
-
-// Shopify webhooks MUST use raw body
-app.use(
-  "/api/webhooks",
-  express.raw({ type: "application/json" })
-);
-
-// Normal JSON everywhere else
-app.use(express.json());
 app.use(cors());
+
+// IMPORTANT:
+// - Webhook route will use express.raw()
+// - Everything else uses express.json()
+app.use(express.json());
 
 // --------------------------------
 // Shopify webhook verification
@@ -47,40 +44,60 @@ function verifyShopifyWebhook(req, rawBody) {
 // --------------------------------
 // SHOPIFY WEBHOOK — ORDERS PAID
 // --------------------------------
-app.post("/api/webhooks/shopify/orders-paid", async (req, res) => {
-  const rawBody = req.body.toString();
+app.post(
+  "/api/webhooks/shopify/orders-paid",
+  express.raw({ type: "application/json" }),
+  async (req, res) => {
+    try {
+      const rawBody = req.body.toString("utf8");
 
-  if (!verifyShopifyWebhook(req, rawBody)) {
-    return res.status(401).send("Invalid webhook");
-  }
+      if (!verifyShopifyWebhook(req, rawBody)) {
+        return res.status(401).send("Invalid webhook");
+      }
 
-  const order = JSON.parse(rawBody);
+      const order = JSON.parse(rawBody);
 
-  const routes = await routeFulfillment(order);
+      const routes = await routeFulfillment(order);
 
-  for (const r of routes) {
-    await prisma.fulfillmentOrder.create({
-      data: {
-        shopifyOrderId: String(order.id),
-        shopifyLineItemId: String(r.lineItemId),
-        supplier: r.supplier,
-        status:
-          r.supplier === "cj" && r.fulfillmentMode === "auto"
-            ? "ordered"
-            : "pending",
-      },
-    });
+      for (const r of routes) {
+        // Create fulfillment row
+        const fo = await prisma.fulfillmentOrder.create({
+          data: {
+            shopifyOrderId: String(order.id),
+            shopifyLineItemId: String(r.lineItemId),
+            supplier: r.supplier, // "cj" | "amazon" | "aliexpress" | "manual"
+            status:
+              r.supplier === "cj" && r.fulfillmentMode === "auto"
+                ? "pending"
+                : "pending",
+            // Optional: if you add these columns later, great:
+            // shopifySku: r.variant?.sku ?? null,
+            // metaJson: JSON.stringify({ ... })
+          },
+        });
 
-    if (r.supplier === "cj" && r.fulfillmentMode === "auto") {
-      await submitCJOrder({
-        order,
-        lineItems: order.line_items,
-      });
+        // If CJ auto → submit immediately (best-effort)
+        if (r.supplier === "cj" && r.fulfillmentMode === "auto") {
+          try {
+            await createCjOrderFromFulfillmentOrder(fo.id);
+          } catch (e) {
+            // keep webhook 200; we’ll retry later
+            console.error("CJ submit failed:", e.message);
+            await prisma.fulfillmentOrder.update({
+              where: { id: fo.id },
+              data: { status: "failed" },
+            });
+          }
+        }
+      }
+
+      return res.sendStatus(200);
+    } catch (err) {
+      console.error("Webhook handler error:", err);
+      return res.status(500).send("Webhook error");
     }
   }
-
-  res.sendStatus(200);
-});
+);
 
 // --------------------------------
 // Live logs (SSE)
@@ -112,20 +129,13 @@ app.get("/", (_, res) => res.redirect("/dashboard"));
 app.post("/api/import", async (req, res) => {
   try {
     const { keyword, mode, markupPercent, source } = req.body;
-    if (!keyword) {
-      return res.status(400).json({ error: "Missing keyword" });
-    }
+    if (!keyword) return res.status(400).json({ error: "Missing keyword" });
 
-    const result = await importKeyword(keyword, {
-      mode,
-      markupPercent,
-      source,
-    });
-
-    res.json(result);
+    const result = await importKeyword(keyword, { mode, markupPercent, source });
+    return res.json(result);
   } catch (err) {
     console.error("❌ Import error:", err);
-    res.status(500).json({ error: err.message });
+    return res.status(500).json({ error: err.message });
   }
 });
 
@@ -200,17 +210,10 @@ app.get("/api/profit", async (_, res) => {
 });
 
 // --------------------------------
-// AUTO-SYNC STATUS (FIXED)
+// AUTO-SYNC STATUS (real)
 // --------------------------------
 app.get("/api/autosync/status", (_, res) => {
-  res.json({
-    enabled: true,
-    running: autoSyncStatus.running,
-    lastRunAt: autoSyncStatus.lastRunAt,
-    lastSuccessAt: autoSyncStatus.lastSuccessAt,
-    lastError: autoSyncStatus.lastError,
-    lastResult: autoSyncStatus.lastError ? "error" : "success",
-  });
+  res.json(getAutoSyncStatus());
 });
 
 // --------------------------------
@@ -220,5 +223,7 @@ const PORT = process.env.PORT || 3000;
 
 app.listen(PORT, () => {
   startAutoSync();
+  startTrackingSyncWorker();
   console.log("✅ Server running on port", PORT);
 });
+

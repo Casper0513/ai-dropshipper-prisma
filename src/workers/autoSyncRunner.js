@@ -3,6 +3,10 @@ import { syncAllVariants } from "./syncWorker.js";
 
 const INTERVAL_MS = 30 * 60 * 1000;
 
+/**
+ * Shared in-memory status
+ * (safe for single Railway container)
+ */
 export const autoSyncStatus = {
   enabled: true,
   running: false,
@@ -13,7 +17,13 @@ export const autoSyncStatus = {
   lastError: null,
 };
 
+let intervalStarted = false;
+
 export function startAutoSync() {
+  // 🛑 Prevent double intervals on hot reload / Railway restart
+  if (intervalStarted) return;
+  intervalStarted = true;
+
   console.log("⏱ Auto-sync every 30 minutes");
 
   const runSync = async () => {
@@ -32,7 +42,7 @@ export function startAutoSync() {
       autoSyncStatus.lastResult = "success";
     } catch (err) {
       console.error("❌ Auto-sync failed:", err);
-      autoSyncStatus.lastError = err.message;
+      autoSyncStatus.lastError = err?.message || "Unknown error";
       autoSyncStatus.lastResult = "error";
     } finally {
       autoSyncStatus.running = false;
@@ -40,16 +50,17 @@ export function startAutoSync() {
     }
   };
 
-  // Run immediately
+  // ▶ Run once on boot
   runSync();
 
-  // Schedule
+  // ⏲ Schedule future runs
   autoSyncStatus.nextRunAt = new Date(Date.now() + INTERVAL_MS);
   setInterval(runSync, INTERVAL_MS);
 }
 
 /**
- * Dashboard-safe status object
+ * Dashboard-safe status getter
+ * (never expose internals directly)
  */
 export function getAutoSyncStatus() {
   return {
@@ -60,4 +71,5 @@ export function getAutoSyncStatus() {
     lastResult: autoSyncStatus.lastResult,
   };
 }
+
 

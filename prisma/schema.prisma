@@ -8,7 +8,7 @@ datasource db {
 }
 
 //////////////////////
-// ENUMS (NEW)
+// ENUMS
 //////////////////////
 
 enum Supplier {
@@ -17,6 +17,7 @@ enum Supplier {
   walmart
   cj
   system
+  manual
 }
 
 enum FulfillmentStatus {
@@ -28,7 +29,7 @@ enum FulfillmentStatus {
 }
 
 //////////////////////
-// RUNS (UNCHANGED)
+// RUNS
 //////////////////////
 
 model Run {
@@ -47,7 +48,6 @@ model Run {
 
 //////////////////////
 // PRODUCT LOGS
-// (extended, backward-compatible)
 //////////////////////
 
 model ProductLog {
@@ -59,7 +59,7 @@ model ProductLog {
   asin             String?
   title            String
 
-  // Pricing (already used by dashboard + sync)
+  // Pricing
   sourcePrice      Float?
   finalPrice       Float?
   currency         String   @default("USD")
@@ -68,7 +68,7 @@ model ProductLog {
   shopifyProductId String?
   shopifyHandle    String?
 
-  // Optional profit tracking (safe add)
+  // Profit (used by dashboard + fulfillment accounting)
   profitAtSale     Float?
 
   createdAt        DateTime @default(now())
@@ -76,25 +76,24 @@ model ProductLog {
 
 //////////////////////
 // SYNCED VARIANTS
-// (CJ + Auto-Sync READY)
 //////////////////////
 
 model SyncedVariant {
   id               Int      @id @default(autoincrement())
 
   // Supplier identifiers
-  asin             String?          // Amazon
-  sku              String?          // AliExpress / CJ
+  asin             String?
+  sku              String?
 
   // Supplier source
-  source           Supplier         // amazon | aliexpress | walmart | cj
+  source           Supplier
 
   // Shopify mapping
   shopifyProductId String
   shopifyVariantId String
   shopifyHandle    String?
 
-  // Pricing
+  // Pricing (USED FOR AMAZON / ALI ONLY)
   currentPrice     Float?
   lastCostPrice    Float?
 
@@ -102,9 +101,11 @@ model SyncedVariant {
   inStock          Boolean  @default(true)
   deleted          Boolean  @default(false)
 
-  // CJ-specific (optional, safe)
-  cjProductId       String?
-  cjVariantId       String?
+  // CJ mapping (FULFILLMENT ONLY)
+  cjProductId      String?
+  cjVariantId      String?
+
+  // Optional state tracking
   fulfillmentStatus FulfillmentStatus?
 
   createdAt        DateTime @default(now())
@@ -112,25 +113,37 @@ model SyncedVariant {
 }
 
 //////////////////////
-// SHOPIFY → CJ ORDERS
-// (NEW – FUTURE FULFILLMENT)
+// FULFILLMENT ORDERS
 //////////////////////
 
 model FulfillmentOrder {
-  id                Int      @id @default(autoincrement())
+  id                    Int      @id @default(autoincrement())
 
-  shopifyOrderId    String   @unique
-  shopifyLineItemId String
+  // Shopify
+  shopifyOrderId        String
+  shopifyLineItemId     String
+  shopifySku            String?
 
-  supplier          Supplier
+  // Supplier
+  supplier              Supplier
 
-  cjOrderId         String?
-  cjTrackingNumber  String?
+  // CJ data
+  cjOrderId             String?
+  cjTrackingNumber      String?
 
-  status            FulfillmentStatus @default(pending)
+  // Shopify fulfillment
+  shopifyFulfillmentSent Boolean @default(false)
 
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  // Metadata for address / qty snapshot
+  metaJson              String?
+
+  status                FulfillmentStatus @default(pending)
+
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@index([shopifyOrderId])
 }
+
 
 

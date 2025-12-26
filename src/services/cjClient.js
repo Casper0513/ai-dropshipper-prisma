@@ -4,13 +4,14 @@ import axios from "axios";
 const CJ_BASE = "https://developers.cjdropshipping.com/api2.0/v1";
 
 /**
- * Env you must set:
+ * Required env:
  *  CJ_EMAIL
  *  CJ_PASSWORD
  *
  * Optional:
- *  CJ_ACCESS_TOKEN (if you want to hard-set it, but we auto-refresh)
+ *  CJ_ACCESS_TOKEN
  */
+
 let cachedToken = process.env.CJ_ACCESS_TOKEN || null;
 let tokenExpiresAt = 0;
 
@@ -18,9 +19,13 @@ function nowMs() {
   return Date.now();
 }
 
-async function getAccessToken() {
-  // reuse if still valid (we keep a short TTL; CJ token expiry can vary)
-  if (cachedToken && nowMs() < tokenExpiresAt) return cachedToken;
+/**
+ * Fetch or reuse CJ access token
+ */
+async function getAccessToken(forceRefresh = false) {
+  if (!forceRefresh && cachedToken && nowMs() < tokenExpiresAt) {
+    return cachedToken;
+  }
 
   const email = process.env.CJ_EMAIL;
   const password = process.env.CJ_PASSWORD;
@@ -29,29 +34,32 @@ async function getAccessToken() {
     throw new Error("CJ credentials missing: set CJ_EMAIL and CJ_PASSWORD");
   }
 
-  const url = `${CJ_BASE}/authentication/getAccessToken`;
+  const res = await axios.post(
+    `${CJ_BASE}/authentication/getAccessToken`,
+    { email, password },
+    { timeout: 30_000 }
+  );
 
-  // CJ docs: POST + JSON body
-  const res = await axios.post(url, { email, password }, { timeout: 30_000 });
-
-  // Typical CJ response format: { code, result, message, data: { accessToken, ... } }
   const data = res.data?.data || {};
   const token = data.accessToken || data.token || data.access_token;
 
   if (!token) {
-    throw new Error(`CJ getAccessToken failed: ${JSON.stringify(res.data)}`);
+    throw new Error(
+      `CJ auth failed: ${JSON.stringify(res.data)}`
+    );
   }
 
   cachedToken = token;
-
-  // set a conservative expiry (55 minutes)
-  tokenExpiresAt = nowMs() + 55 * 60 * 1000;
+  tokenExpiresAt = nowMs() + 55 * 60 * 1000; // safe TTL
 
   return cachedToken;
 }
 
+/**
+ * Unified CJ request with retry-on-401
+ */
 export async function cjRequest(method, path, { params, data } = {}) {
-  const token = await getAccessToken();
+  let token = await getAccessToken();
   const url = `${CJ_BASE}${path}`;
 
   try {
@@ -66,21 +74,55 @@ export async function cjRequest(method, path, { params, data } = {}) {
         "CJ-Access-Token": token,
       },
     });
-    return res.data;
+
+    if (res.data?.code && res.data.code !== 200) {
+      throw new Error(`CJ error: ${JSON.stringify(res.data)}`);
+    }
+
+    return res.data?.data ?? res.data;
   } catch (err) {
+    // Retry once if token expired
+    if (err.response?.status === 401) {
+      token = await getAccessToken(true);
+
+      const retry = await axios.request({
+        method,
+        url,
+        params,
+        data,
+        timeout: 45_000,
+        headers: {
+          "Content-Type": "application/json",
+          "CJ-Access-Token": token,
+        },
+      });
+
+      return retry.data?.data ?? retry.data;
+    }
+
     const msg = err.response?.data || err.message;
-    throw new Error(`CJ API error ${method} ${path}: ${JSON.stringify(msg)}`);
+    throw new Error(
+      `CJ API error ${method} ${path}: ${JSON.stringify(msg)}`
+    );
   }
 }
 
 /**
- * Tracking query:
- * GET /logistic/trackInfo?trackNumber=XXXX
- * (CJ docs show trackInfo as current endpoint) :contentReference[oaicite:2]{index=2}
+ * Submit CJ order
+ * Used by fulfillment dispatcher
+ */
+export async function submitCJOrder(payload) {
+  return cjRequest("POST", "/shopping/order/createOrder", {
+    data: payload,
+  });
+}
+
+/**
+ * Get CJ tracking info
  */
 export async function cjGetTracking(trackNumber) {
-  const res = await cjRequest("GET", "/logistic/trackInfo", {
+  return cjRequest("GET", "/logistic/trackInfo", {
     params: { trackNumber },
   });
-  return res;
 }
+
