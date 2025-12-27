@@ -1,5 +1,7 @@
 import "./Dashboard.css";
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import FulfillmentTable from "./components/FulfillmentTable";
+
 
 /**
  * If your API is same-origin, leave API_BASE = "".
@@ -675,6 +677,13 @@ export default function DashboardApp() {
             onClick={() => setTab("import")}
           >
             Import & Sync
+          </button>
+
+          <button
+            className={tab === "fulfillment" ? "active" : ""}
+            onClick={() => setTab("fulfillment")}
+          >
+            Fulfillment
           </button>
         </div>
 
