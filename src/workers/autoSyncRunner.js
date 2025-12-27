@@ -4,10 +4,10 @@ import { syncAllVariants } from "./syncWorker.js";
 const INTERVAL_MS = 30 * 60 * 1000;
 
 /**
- * Shared in-memory status
- * (safe for single Railway container)
+ * Shared in-memory auto-sync status
+ * Safe for single Railway container
  */
-export const autoSyncStatus = {
+const autoSyncState = {
   enabled: true,
   running: false,
   lastRunAt: null,
@@ -19,57 +19,62 @@ export const autoSyncStatus = {
 
 let intervalStarted = false;
 
+/**
+ * Start the auto-sync scheduler
+ */
 export function startAutoSync() {
-  // 🛑 Prevent double intervals on hot reload / Railway restart
+  // Prevent duplicate intervals (Railway hot reload safe)
   if (intervalStarted) return;
   intervalStarted = true;
 
   console.log("⏱ Auto-sync every 30 minutes");
 
   const runSync = async () => {
-    if (autoSyncStatus.running) return;
+    if (autoSyncState.running) return;
 
-    autoSyncStatus.running = true;
-    autoSyncStatus.lastRunAt = new Date();
-    autoSyncStatus.lastError = null;
-    autoSyncStatus.lastResult = "unknown";
+    autoSyncState.running = true;
+    autoSyncState.lastRunAt = new Date();
+    autoSyncState.lastError = null;
+    autoSyncState.lastResult = "unknown";
 
     console.log("🔄 Auto-sync started");
 
     try {
       await syncAllVariants();
-      autoSyncStatus.lastSuccessAt = new Date();
-      autoSyncStatus.lastResult = "success";
+      autoSyncState.lastSuccessAt = new Date();
+      autoSyncState.lastResult = "success";
     } catch (err) {
       console.error("❌ Auto-sync failed:", err);
-      autoSyncStatus.lastError = err?.message || "Unknown error";
-      autoSyncStatus.lastResult = "error";
+      autoSyncState.lastError = err?.message || "Unknown error";
+      autoSyncState.lastResult = "error";
     } finally {
-      autoSyncStatus.running = false;
-      autoSyncStatus.nextRunAt = new Date(Date.now() + INTERVAL_MS);
+      autoSyncState.running = false;
+      autoSyncState.nextRunAt = new Date(Date.now() + INTERVAL_MS);
     }
   };
 
-  // ▶ Run once on boot
+  // Run immediately on boot
   runSync();
 
-  // ⏲ Schedule future runs
-  autoSyncStatus.nextRunAt = new Date(Date.now() + INTERVAL_MS);
+  // Schedule future runs
+  autoSyncState.nextRunAt = new Date(Date.now() + INTERVAL_MS);
   setInterval(runSync, INTERVAL_MS);
 }
 
 /**
- * Dashboard-safe status getter
- * (never expose internals directly)
+ * Public, immutable snapshot for dashboard
  */
 export function getAutoSyncStatus() {
   return {
-    enabled: autoSyncStatus.enabled,
-    running: autoSyncStatus.running,
-    lastRunAt: autoSyncStatus.lastRunAt,
-    nextRunAt: autoSyncStatus.nextRunAt,
-    lastResult: autoSyncStatus.lastResult,
+    enabled: autoSyncState.enabled,
+    running: autoSyncState.running,
+    lastRunAt: autoSyncState.lastRunAt,
+    nextRunAt: autoSyncState.nextRunAt,
+    lastResult: autoSyncState.lastResult,
+    lastSuccessAt: autoSyncState.lastSuccessAt,
+    lastError: autoSyncState.lastError,
   };
 }
+
 
 
