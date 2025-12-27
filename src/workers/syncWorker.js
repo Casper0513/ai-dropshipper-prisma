@@ -36,16 +36,28 @@ export async function syncAllVariants() {
     });
 
     for (const v of variants) {
-      // 🔒 CJ DROPSHIPPING RULE
+      /**
+       * 🔒 CJ DROPSHIPPING RULE
+       * CJ is fulfillment-only
+       * NEVER touch price or stock
+       */
       if (v.source === "cj") {
-        // CJ is fulfillment-only
-        // NEVER touch stock or price
         continue;
       }
 
-      const details = await fetchBestSourceDetails(v);
+      let details;
+      try {
+        details = await fetchBestSourceDetails(v);
+      } catch (err) {
+        pushLiveLog(
+          `⚠️ Supplier fetch failed ${v.asin || v.sku}: ${err.message}`
+        );
+        continue;
+      }
 
-      // ❌ Supplier product removed
+      /**
+       * ❌ Supplier product removed
+       */
       if (!details) {
         pushLiveLog(`❌ No supplier data → deleting ${v.asin || v.sku}`);
 
@@ -53,7 +65,10 @@ export async function syncAllVariants() {
 
         await prisma.syncedVariant.update({
           where: { id: v.id },
-          data: { deleted: true, inStock: false },
+          data: {
+            deleted: true,
+            inStock: false,
+          },
         });
 
         await prisma.productLog.create({
@@ -72,8 +87,9 @@ export async function syncAllVariants() {
 
       /**
        * 📦 STOCK SYNC (NON-CJ ONLY)
+       * Shopify status toggle only
        */
-      if (inStock !== v.inStock) {
+      if (typeof inStock === "boolean" && inStock !== v.inStock) {
         pushLiveLog(
           `📦 Stock ${v.asin || v.sku}: ${
             v.inStock ? "IN" : "OUT"
@@ -109,7 +125,12 @@ export async function syncAllVariants() {
           newPrice
         );
 
-        if (!ok) continue;
+        if (!ok) {
+          pushLiveLog(
+            `⚠️ Shopify price update failed ${v.asin || v.sku}`
+          );
+          continue;
+        }
 
         await prisma.productLog.create({
           data: {
@@ -128,6 +149,9 @@ export async function syncAllVariants() {
           data: { currentPrice: newPrice },
         });
 
+        /**
+         * 🚨 PRICE INCREASE ALERT
+         */
         if (newPrice > oldPrice) {
           const ratio = (newPrice - oldPrice) / oldPrice;
           if (ratio >= PRICE_INCREASE_ALERT_THRESHOLD) {
@@ -151,12 +175,16 @@ export async function syncAllVariants() {
   } catch (err) {
     await prisma.run.update({
       where: { id: autoSyncRun.id },
-      data: { status: "error" },
+      data: {
+        status: "error",
+        errorMessage: err?.message || "Unknown error",
+      },
     });
 
     pushLiveLog(`❌ Auto-sync failed: ${err.message}`);
     throw err;
   }
 }
+
 
 
