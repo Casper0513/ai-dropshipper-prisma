@@ -1,5 +1,5 @@
 -- AlterEnum
-ALTER TYPE "Supplier" ADD VALUE 'manual';
+ALTER TYPE "Supplier" ADD VALUE IF NOT EXISTS'manual';
 
 -- DropIndex
 ALTER TABLE "FulfillmentOrder"
