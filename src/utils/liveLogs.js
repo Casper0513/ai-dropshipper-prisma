@@ -1,45 +1,54 @@
 // src/utils/liveLogs.js
 
-let clients = [];
+/**
+ * In-memory SSE clients
+ * NOTE: This is process-local (fine for Railway single instance)
+ */
+const clients = new Set();
 
 /**
  * Attach SSE endpoint to Express app
+ * Endpoint: GET /api/logs/live
  */
 export function attachLiveLogs(app) {
   app.get("/api/logs/live", (req, res) => {
     res.setHeader("Content-Type", "text/event-stream");
-    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
     res.setHeader("Connection", "keep-alive");
     res.flushHeaders?.();
 
-    const clientId = Date.now();
-    const client = { id: clientId, res };
-    clients.push(client);
+    // Register client
+    clients.add(res);
 
-    // Initial message
-    res.write(`data: 🟢 Connected to live logs\n\n`);
+    // Initial ping
+    res.write(`data: 🟢 Live logs connected\n\n`);
 
+    // Cleanup on disconnect
     req.on("close", () => {
-      clients = clients.filter((c) => c.id !== clientId);
+      clients.delete(res);
     });
   });
 }
 
 /**
  * Push a log line to all connected clients
+ * Safe, idempotent, never throws
  */
 export function pushLiveLog(message) {
+  if (!clients.size) return;
+
   const line =
     typeof message === "string"
       ? message
       : JSON.stringify(message);
 
-  for (const c of clients) {
+  for (const res of clients) {
     try {
-      c.res.write(`data: ${line}\n\n`);
+      res.write(`data: ${line}\n\n`);
     } catch {
-      // Drop broken connections silently
+      clients.delete(res);
     }
   }
 }
+
 
