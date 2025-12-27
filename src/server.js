@@ -16,6 +16,7 @@ import { routeFulfillment } from "./services/fulfillmentRouter.js";
 import { createCjOrderFromFulfillmentOrder } from "./services/cjFulfillment.js";
 
 import { startTrackingSyncWorker } from "./workers/trackingSyncWorker.js";
+import { startFulfillmentRetryWorker } from "./workers/fulfillmentRetryWorker.js";
 
 // --------------------------------
 // App bootstrap
@@ -224,6 +225,7 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   startAutoSync();
   startTrackingSyncWorker();
+  startFulfillmentRetryWorker();
   console.log("✅ Server running on port", PORT);
 });
 
