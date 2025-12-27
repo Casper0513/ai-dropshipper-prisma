@@ -221,13 +221,7 @@ app.get("/api/autosync/status", (_, res) => {
     "Surrogate-Control": "no-store",
   });
 
-  res.json({
-    enabled: true,
-    running: autoSyncStatus.running,
-    lastRunAt: autoSyncStatus.lastRunAt,
-    nextRunAt: autoSyncStatus.nextRunAt,
-    lastResult: autoSyncStatus.lastResult,
-  });
+  res.json(getAutoSyncStatus());
 });
 
 // --------------------------------
