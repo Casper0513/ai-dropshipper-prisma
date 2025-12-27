@@ -214,7 +214,20 @@ app.get("/api/profit", async (_, res) => {
 // AUTO-SYNC STATUS (real)
 // --------------------------------
 app.get("/api/autosync/status", (_, res) => {
-  res.json(getAutoSyncStatus());
+  res.set({
+    "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+    Pragma: "no-cache",
+    Expires: "0",
+    "Surrogate-Control": "no-store",
+  });
+
+  res.json({
+    enabled: true,
+    running: autoSyncStatus.running,
+    lastRunAt: autoSyncStatus.lastRunAt,
+    nextRunAt: autoSyncStatus.nextRunAt,
+    lastResult: autoSyncStatus.lastResult,
+  });
 });
 
 // --------------------------------
