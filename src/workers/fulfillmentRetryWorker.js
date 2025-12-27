@@ -8,23 +8,33 @@ const INTERVAL_MS = Math.max(5, RETRY_MINUTES) * 60 * 1000;
 
 /**
  * Retry failed / pending CJ fulfillment orders
+ *
+ * Guarantees:
  * - CJ only
- * - Idempotent (never duplicates CJ orders)
- * - Safe for long-running servers
+ * - Never duplicates CJ orders
+ * - Safe for Railway / long-running servers
+ * - Stores retry errors in metaJson (no schema churn)
  */
 export function startFulfillmentRetryWorker() {
   pushLiveLog(`🔁 CJ fulfillment retry every ${RETRY_MINUTES} minutes`);
 
   const tick = async () => {
-    const candidates = await prisma.fulfillmentOrder.findMany({
-      where: {
-        supplier: "cj",
-        status: { in: ["pending", "failed"] },
-        cjOrderId: null, // ✅ NEVER retry if already created
-      },
-      take: 20,
-      orderBy: { createdAt: "asc" },
-    });
+    let candidates = [];
+
+    try {
+      candidates = await prisma.fulfillmentOrder.findMany({
+        where: {
+          supplier: "cj",
+          status: { in: ["pending", "failed"] },
+          cjOrderId: null, // 🔒 NEVER retry once CJ order exists
+        },
+        take: 20,
+        orderBy: { createdAt: "asc" },
+      });
+    } catch (err) {
+      pushLiveLog(`❌ Retry fetch failed: ${err.message}`);
+      return;
+    }
 
     for (const fo of candidates) {
       try {
@@ -34,22 +44,23 @@ export function startFulfillmentRetryWorker() {
 
         await createCjOrderFromFulfillmentOrder(fo.id);
 
-        // Status will be updated inside createCjOrderFromFulfillmentOrder
-        pushLiveLog(
-          `✅ CJ retry success orderId=${fo.shopifyOrderId}`
-        );
+        // createCjOrderFromFulfillmentOrder updates status internally
+        pushLiveLog(`✅ CJ retry success orderId=${fo.shopifyOrderId}`);
       } catch (err) {
         const msg = err?.message || "Unknown error";
 
-        // ⚠️ No lastError column — store error in metaJson instead
+        // 🧠 Persist retry info safely (no schema changes)
+        const meta = safeJson(fo.metaJson);
+
         await prisma.fulfillmentOrder.update({
           where: { id: fo.id },
           data: {
             status: "failed",
             metaJson: JSON.stringify({
-              ...(fo.metaJson ? safeJson(fo.metaJson) : {}),
+              ...meta,
               lastRetryError: msg.slice(0, 500),
               lastRetryAt: new Date().toISOString(),
+              retryCount: (meta.retryCount || 0) + 1,
             }),
           },
         });
@@ -61,16 +72,21 @@ export function startFulfillmentRetryWorker() {
     }
   };
 
-  // Run immediately, then on interval
+  // ▶ Run immediately, then on interval
   tick();
   setInterval(tick, INTERVAL_MS);
 }
 
+/**
+ * Safe JSON parse helper
+ */
 function safeJson(s) {
+  if (!s) return {};
   try {
     return JSON.parse(s);
   } catch {
     return {};
   }
 }
+
 
