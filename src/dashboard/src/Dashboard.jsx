@@ -696,7 +696,13 @@ export default function DashboardApp() {
       <main className="main">
         <div className="topbar">
           <div>
-            <h2>{tab === "overview" ? "Overview" : "Import & Sync"}</h2>
+            <h2>
+              {tab === "overview"
+                ? "Overview"
+                : tab === "import"
+                ? "Import & Sync"
+                : "Fulfillment"}
+            </h2>
             <div className="mini">
               {logsConnected ? "Live logs online" : "Live logs offline"} · Auto-sync:{" "}
               {syncStatus?.enabled ? "enabled" : "disabled"}
@@ -715,7 +721,22 @@ export default function DashboardApp() {
           </div>
         </div>
 
-        {tab === "overview" ? overview : importTab}
+        {tab === "overview" && overview}
+        {tab === "import" && importTab}
+        {tab === "fulfillment" && (
+          <div className="section">
+            <div className="section-header">
+              <div>
+                <h3>Fulfillment</h3>
+                <div className="mini">
+                  Shopify → CJ → Delivered (auto-updating)
+                </div>
+              </div>
+            </div>
+
+            <FulfillmentTable />
+          </div>
+        )}
       </main>
     </div>
   );
