@@ -14,6 +14,7 @@ import { attachLiveLogs } from "./utils/liveLogs.js";
 
 import { routeFulfillment } from "./services/fulfillmentRouter.js";
 import { createCjOrderFromFulfillmentOrder } from "./services/cjFulfillment.js";
+import { listFulfillmentOrders, getFulfillmentOrder, } from "./services/fulfillmentApi.js";
 
 import { startTrackingSyncWorker } from "./workers/trackingSyncWorker.js";
 import { startFulfillmentRetryWorker } from "./workers/fulfillmentRetryWorker.js";
@@ -218,6 +219,72 @@ app.get("/api/fulfillment", async (req, res) => {
     res.json({ rows: enriched });
   } catch (err) {
     console.error("Fulfillment API error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --------------------------------
+// API — FULFILLMENT (Dashboard)
+// --------------------------------
+
+app.get("/api/fulfillment", async (req, res) => {
+  try {
+    const limit = Number(req.query.limit || 50);
+    const rows = await listFulfillmentOrders({ limit });
+    res.json({ rows });
+  } catch (err) {
+    console.error("Fulfillment list error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/api/fulfillment/:id", async (req, res) => {
+  try {
+    const row = await getFulfillmentOrder(req.params.id);
+    if (!row) return res.status(404).json({ error: "Not found" });
+    res.json(row);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * Manual retry (CJ only)
+ */
+app.post("/api/fulfillment/:id/retry", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+
+    const fo = await prisma.fulfillmentOrder.findUnique({ where: { id } });
+    if (!fo) return res.status(404).json({ error: "Not found" });
+
+    if (fo.supplier !== "cj") {
+      return res.status(400).json({ error: "Not a CJ fulfillment" });
+    }
+
+    await createCjOrderFromFulfillmentOrder(id);
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error("Fulfillment retry error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * Manual mark delivered (safe override)
+ */
+app.post("/api/fulfillment/:id/mark-delivered", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+
+    const updated = await prisma.fulfillmentOrder.update({
+      where: { id },
+      data: { status: "delivered" },
+    });
+
+    res.json(updated);
+  } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
