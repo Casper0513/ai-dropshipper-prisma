@@ -187,43 +187,6 @@ app.get("/api/autosync/status", (_, res) => {
 });
 
 // --------------------------------
-// API — FULFILLMENT TABLE
-// --------------------------------
-app.get("/api/fulfillment", async (req, res) => {
-  try {
-    const rows = await prisma.fulfillmentOrder.findMany({
-      orderBy: { createdAt: "desc" },
-      take: 50,
-    });
-
-    const enriched = rows.map((fo) => {
-      let meta = {};
-      try {
-        meta = fo.metaJson ? JSON.parse(fo.metaJson) : {};
-      } catch {}
-
-      return {
-        id: fo.id,
-        shopifyOrderId: fo.shopifyOrderId,
-        shopifyLineItemId: fo.shopifyLineItemId,
-        supplier: fo.supplier,
-        status: fo.status,
-        cjOrderId: fo.cjOrderId,
-        cjTrackingNumber: fo.cjTrackingNumber,
-        shopifyFulfillmentSent: fo.shopifyFulfillmentSent,
-        lastError: meta.lastRetryError || null,
-        createdAt: fo.createdAt,
-      };
-    });
-
-    res.json({ rows: enriched });
-  } catch (err) {
-    console.error("Fulfillment API error:", err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// --------------------------------
 // API — FULFILLMENT (Dashboard)
 // --------------------------------
 
@@ -237,6 +200,10 @@ app.get("/api/fulfillment", async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+/**
+ * Single fulfillment order (detail view / future use)
+ */
 
 app.get("/api/fulfillment/:id", async (req, res) => {
   try {
