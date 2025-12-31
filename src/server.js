@@ -277,6 +277,15 @@ app.get("/api/autosync/status", (_, res) => {
 // --------------------------------
 app.get("/api/fulfillment", async (req, res) => {
   try {
+    
+    // 🚫 Disable all caching (fixes 304 permanently)
+    res.set({
+      "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
+      Pragma: "no-cache",
+      Expires: "0",
+      "Surrogate-Control": "no-store",
+    });
+
     const limit = Number(req.query.limit || 50);
     const rows = await listFulfillmentOrders({ limit });
     res.json({ rows });
