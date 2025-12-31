@@ -188,6 +188,78 @@ app.get("/api/runs", async (_, res) => {
 });
 
 // --------------------------------
+// API — PROFIT (Dashboard)
+// --------------------------------
+app.get("/api/profit", async (_, res) => {
+  try {
+    /**
+     * Product-level profit (existing logic)
+     */
+    const products = await prisma.productLog.findMany({
+      where: {
+        finalPrice: { not: null },
+        sourcePrice: { not: null },
+      },
+      take: 50,
+      orderBy: { createdAt: "desc" },
+    });
+
+    const enrichedProducts = products.map((p) => {
+      const profit = p.finalPrice - p.sourcePrice;
+      const margin =
+        p.sourcePrice > 0 ? (profit / p.sourcePrice) * 100 : 0;
+
+      return {
+        ...p,
+        profit,
+        margin,
+      };
+    });
+
+    /**
+     * Fulfillment-level profit (NEW)
+     * salePrice - supplierCost (if available later)
+     */
+    const fulfillments = await prisma.fulfillmentOrder.findMany({
+      where: {
+        salePrice: { not: null },
+      },
+      take: 50,
+      orderBy: { createdAt: "desc" },
+    });
+
+    const fulfillmentProfit = fulfillments.reduce(
+      (sum, f) => sum + (f.salePrice || 0),
+      0
+    );
+
+    res.json({
+      totalProfit: enrichedProducts.reduce(
+        (a, b) => a + (b.profit || 0),
+        0
+      ),
+      avgMargin:
+        enrichedProducts.length > 0
+          ? enrichedProducts.reduce((a, b) => a + b.margin, 0) /
+            enrichedProducts.length
+          : 0,
+
+      topProducts: enrichedProducts
+        .sort((a, b) => b.profit - a.profit)
+        .slice(0, 5),
+
+      priceAlerts: [],
+
+      // Optional future use
+      fulfillmentRevenue: fulfillmentProfit,
+    });
+  } catch (err) {
+    console.error("Profit API error:", err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --------------------------------
 // API — AUTO-SYNC STATUS (FIXES 304)
 // --------------------------------
 app.get("/api/autosync/status", (_, res) => {
