@@ -1,33 +1,23 @@
-import { useEffect, useState } from "react";
-
-export default function FulfillmentTable() {
-  const [rows, setRows] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  async function load() {
-    try {
-      const res = await fetch("/api/fulfillment");
-      const json = await res.json();
-      setRows(json.rows || []);
-    } catch (e) {
-      console.error("Fulfillment load error", e);
-    } finally {
-      setLoading(false);
-    }
+// src/components/FulfillmentTable.jsx
+export default function FulfillmentTable({
+  rows = [],
+  loading = false,
+  onRetry,
+}) {
+  if (loading) {
+    return <p className="mini">Loading fulfillment…</p>;
   }
 
-  useEffect(() => {
-    load();
-    const t = setInterval(load, 5000);
-    return () => clearInterval(t);
-  }, []);
-
-  if (loading) return <p>Loading fulfillment…</p>;
+  if (!rows.length) {
+    return (
+      <div className="empty-state">
+        No fulfillment orders yet.
+      </div>
+    );
+  }
 
   return (
-    <div>
-      <h2>📦 Fulfillment</h2>
-
+    <div className="tableWrap">
       <table style={{ width: "100%", borderCollapse: "collapse" }}>
         <thead>
           <tr>
@@ -35,33 +25,66 @@ export default function FulfillmentTable() {
             <th>Supplier</th>
             <th>Status</th>
             <th>Tracking</th>
-            <th>Retry</th>
+            <th>Action</th>
             <th>Created</th>
           </tr>
         </thead>
 
         <tbody>
-          {rows.map((r) => (
-            <tr key={r.id}>
-              <td>{r.shopifyOrderId}</td>
-              <td>{r.supplier}</td>
-              <td>
-                <StatusBadge status={r.status} />
-              </td>
-              <td>
-                {r.cjTrackingNumber || "—"}
-              </td>
-              <td>
-                {r.lastError ? "❌" : "—"}
-              </td>
-              <td>
-                {new Date(r.createdAt).toLocaleString()}
-              </td>
-            </tr>
-          ))}
+          {rows.map((r) => {
+            const retryable =
+              r.supplier === "cj" &&
+              (r.status === "failed" || r.status === "pending") &&
+              !r.cjOrderId;
+
+            return (
+              <tr key={r.id}>
+                <td className="mono">{r.shopifyOrderId}</td>
+
+                <td>
+                  <Pill>{r.supplier}</Pill>
+                </td>
+
+                <td>
+                  <StatusBadge status={r.status} />
+                </td>
+
+                <td className="mono">
+                  {r.cjTrackingNumber || "—"}
+                </td>
+
+                <td>
+                  {retryable ? (
+                    <button
+                      className="btn sm"
+                      onClick={() => onRetry?.(r.id)}
+                    >
+                      Retry
+                    </button>
+                  ) : (
+                    "—"
+                  )}
+                </td>
+
+                <td className="mini">
+                  {new Date(r.createdAt).toLocaleString()}
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
+  );
+}
+
+/* ---------- Helpers ---------- */
+
+function Pill({ children }) {
+  return (
+    <span className="pill neutral">
+      {children}
+    </span>
   );
 }
 
@@ -82,9 +105,11 @@ function StatusBadge({ status }) {
         background: colors[status] || "#999",
         color: "#000",
         fontWeight: 600,
+        textTransform: "capitalize",
       }}
     >
       {status}
     </span>
   );
 }
+
