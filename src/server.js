@@ -14,7 +14,10 @@ import { attachLiveLogs } from "./utils/liveLogs.js";
 
 import { routeFulfillment } from "./services/fulfillmentRouter.js";
 import { createCjOrderFromFulfillmentOrder } from "./services/cjFulfillment.js";
-import { listFulfillmentOrders, getFulfillmentOrder, } from "./services/fulfillmentApi.js";
+import {
+  listFulfillmentOrders,
+  getFulfillmentOrder,
+} from "./services/fulfillmentApi.js";
 
 import { startTrackingSyncWorker } from "./workers/trackingSyncWorker.js";
 import { startFulfillmentRetryWorker } from "./workers/fulfillmentRetryWorker.js";
@@ -66,17 +69,28 @@ app.post("/api/webhooks/shopify/orders-paid", async (req, res) => {
     const routes = await routeFulfillment(order);
 
     for (const r of routes) {
+      const lineItem = order.line_items?.find(
+        (i) => String(i.id) === r.lineItemId
+      );
+
+      // 💰 SALE PRICE (immutable, accounting-safe)
+      const salePrice = lineItem
+        ? Number(lineItem.price) * Number(lineItem.quantity || 1)
+        : null;
+
       const fo = await prisma.fulfillmentOrder.create({
         data: {
           shopifyOrderId: String(order.id),
           shopifyLineItemId: String(r.lineItemId),
           supplier: r.supplier,
           status: "pending",
+
+          // ✅ PROFIT INPUT
+          salePrice,
+
           metaJson: JSON.stringify({
             sku: r.variant?.sku || null,
-            quantity:
-              order.line_items?.find((i) => String(i.id) === r.lineItemId)
-                ?.quantity || 1,
+            quantity: lineItem?.quantity || 1,
             recipient: order.shipping_address || null,
           }),
         },
@@ -189,7 +203,6 @@ app.get("/api/autosync/status", (_, res) => {
 // --------------------------------
 // API — FULFILLMENT (Dashboard)
 // --------------------------------
-
 app.get("/api/fulfillment", async (req, res) => {
   try {
     const limit = Number(req.query.limit || 50);
@@ -202,9 +215,8 @@ app.get("/api/fulfillment", async (req, res) => {
 });
 
 /**
- * Single fulfillment order (detail view / future use)
+ * Single fulfillment order
  */
-
 app.get("/api/fulfillment/:id", async (req, res) => {
   try {
     const row = await getFulfillmentOrder(req.params.id);
@@ -267,5 +279,4 @@ app.listen(PORT, () => {
   startFulfillmentRetryWorker();
   console.log("✅ Server running on port", PORT);
 });
-
 
