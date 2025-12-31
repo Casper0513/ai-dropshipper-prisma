@@ -300,6 +300,12 @@ app.get("/api/fulfillment", async (req, res) => {
  */
 app.get("/api/fulfillment/:id", async (req, res) => {
   try {
+    res.set({
+      "Cache-Control": "no-store, no-cache, must-revalidate",
+      Pragma: "no-cache",
+      Expires: "0",
+    });
+
     const row = await getFulfillmentOrder(req.params.id);
     if (!row) return res.status(404).json({ error: "Not found" });
     res.json(row);
