@@ -188,6 +188,46 @@ app.get("/api/runs", async (_, res) => {
 });
 
 // --------------------------------
+// API — SOURCE STATUS (Dashboard)
+// --------------------------------
+app.get("/api/status/sources", async (_, res) => {
+  res.set({
+    "Cache-Control": "no-store, no-cache, must-revalidate",
+    Pragma: "no-cache",
+    Expires: "0",
+  });
+
+  res.json({
+    sources: [
+      {
+        name: "Amazon",
+        status: "ok",
+        lastSync: new Date(),
+        message: "Operational",
+      },
+      {
+        name: "AliExpress",
+        status: "ok",
+        lastSync: new Date(),
+        message: "Operational",
+      },
+      {
+        name: "Walmart",
+        status: "ok",
+        lastSync: null,
+        message: "Not active",
+      },
+      {
+        name: "CJ Dropshipping",
+        status: "ok",
+        lastSync: new Date(),
+        message: "Connected",
+      },
+    ],
+  });
+});
+
+// --------------------------------
 // API — PROFIT (Dashboard)
 // --------------------------------
 app.get("/api/profit", async (_, res) => {
