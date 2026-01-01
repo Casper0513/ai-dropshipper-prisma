@@ -87,11 +87,50 @@ export async function createCjOrderFromFulfillmentOrder(fulfillmentOrderId) {
 
   const supplierCost = cjProductCost + cjShippingCost;
 
-  let salePrice = fo.salePrice ?? null;
-  if (!salePrice && fo.metaJson) {
-    try {
-      salePrice = JSON.parse(fo.metaJson)?.salePrice ?? null;
-    } catch {}
+  // -------------------------------
+  // 🛑 PROFIT GUARD (HARD STOP)
+  // -------------------------------
+  const salePrice =
+    fo.salePrice ??
+    (fo.metaJson
+      ? (() => {
+          try {
+            return JSON.parse(fo.metaJson)?.salePrice ?? null;
+          } catch {
+            return null;
+          }
+        })()
+      : null);
+
+  if (salePrice != null && supplierCost > salePrice) {
+    const loss = supplierCost - salePrice;
+
+    await prisma.fulfillmentOrder.update({
+      where: { id: fo.id },
+      data: {
+        status: "failed",
+        supplierCost,
+        shippingCost: cjShippingCost,
+        profit: -loss,
+        metaJson: JSON.stringify({
+          ...(fo.metaJson ? JSON.parse(fo.metaJson) : {}),
+          blockedReason: "NEGATIVE_PROFIT",
+          blockedAt: new Date().toISOString(),
+          salePrice,
+          supplierCost,
+        }),
+      },
+    });
+
+    pushLiveLog(
+      `🛑 [CJ BLOCKED] Order ${fo.shopifyOrderId} blocked (loss $${loss.toFixed(
+        2
+      )})`
+    );
+
+    throw new Error(
+      `Order blocked: supplierCost (${supplierCost}) > salePrice (${salePrice})`
+    );
   }
 
   const profit =
