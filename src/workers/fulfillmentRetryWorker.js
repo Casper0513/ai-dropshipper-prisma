@@ -1,6 +1,9 @@
 // src/workers/fulfillmentRetryWorker.js
 import { prisma } from "../db/client.js";
 import { createCjOrderFromFulfillmentOrder } from "../services/cjFulfillment.js";
+import {
+  createAliExpressOrderFromFulfillmentOrder,
+} from "../services/aliexpressFulfillment.js";
 import { pushLiveLog } from "../utils/liveLogs.js";
 
 const RETRY_MINUTES = Number(process.env.CJ_RETRY_MINUTES || "15");
@@ -10,10 +13,11 @@ const INTERVAL_MS = Math.max(5, RETRY_MINUTES) * 60 * 1000;
  * Retry failed / pending CJ fulfillment orders
  *
  * Guarantees:
- * - CJ only
+ * - CJ primary
+ * - AliExpress fallback
  * - Never duplicates CJ orders
  * - Safe for Railway / long-running servers
- * - Stores retry errors in metaJson (no schema churn)
+ * - Stores retry + fallback info in metaJson
  */
 export function startFulfillmentRetryWorker() {
   pushLiveLog(`🔁 CJ fulfillment retry every ${RETRY_MINUTES} minutes`);
@@ -48,10 +52,29 @@ export function startFulfillmentRetryWorker() {
         pushLiveLog(`✅ CJ retry success orderId=${fo.shopifyOrderId}`);
       } catch (err) {
         const msg = err?.message || "Unknown error";
-
-        // 🧠 Persist retry info safely (no schema changes)
         const meta = safeJson(fo.metaJson);
 
+        /**
+         * 🟡 FALLBACK CONDITIONS
+         * - Profit blocked
+         * - Explicit CJ failure
+         * - Retry limit reached
+         */
+        const shouldFallback =
+          msg.includes("NEGATIVE_PROFIT") ||
+          meta.blockedReason === "NEGATIVE_PROFIT" ||
+          (meta.retryCount || 0) >= 3;
+
+        if (shouldFallback && meta.fallbackTo !== "aliexpress") {
+          pushLiveLog(
+            `🟡 [FALLBACK] Switching Shopify ${fo.shopifyOrderId} → AliExpress`
+          );
+
+          await createAliExpressOrderFromFulfillmentOrder(fo.id);
+          continue;
+        }
+
+        // ❌ Persist CJ failure
         await prisma.fulfillmentOrder.update({
           where: { id: fo.id },
           data: {
@@ -88,5 +111,6 @@ function safeJson(s) {
     return {};
   }
 }
+
 
 
