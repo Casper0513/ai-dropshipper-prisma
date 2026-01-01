@@ -5,10 +5,8 @@ import { pushLiveLog } from "../utils/liveLogs.js";
 
 /**
  * Create a CJ order from a FulfillmentOrder row
- * - Assumes Shopify webhook already stored:
- *   - shopifySku
- *   - quantity
- *   - shippingName / address / city / province / country / zip / phone
+ * - Idempotent
+ * - Calculates profit at fulfillment time
  */
 export async function createCjOrderFromFulfillmentOrder(fulfillmentOrderId) {
   const fo = await prisma.fulfillmentOrder.findUnique({
@@ -17,7 +15,7 @@ export async function createCjOrderFromFulfillmentOrder(fulfillmentOrderId) {
 
   if (!fo) throw new Error("FulfillmentOrder not found");
   if (fo.supplier !== "cj") return fo;
-  if (fo.status !== "pending") return fo;
+  if (fo.cjOrderId) return fo; // ✅ idempotent
 
   if (!fo.shopifySku) {
     throw new Error("FulfillmentOrder missing shopifySku");
@@ -37,10 +35,8 @@ export async function createCjOrderFromFulfillmentOrder(fulfillmentOrderId) {
     );
   }
 
-  // ✅ Build CJ payload (STRICT + VALID)
   const payload = {
     orderNumber: String(fo.shopifyOrderId),
-
     recipient: {
       name: fo.shippingName,
       address: fo.shippingAddress1,
@@ -51,7 +47,6 @@ export async function createCjOrderFromFulfillmentOrder(fulfillmentOrderId) {
       zip: fo.shippingZip || "",
       phone: fo.shippingPhone || "",
     },
-
     products: [
       {
         vid: variant.cjVariantId,
@@ -78,12 +73,11 @@ export async function createCjOrderFromFulfillmentOrder(fulfillmentOrderId) {
       `[CJ] createOrderV2 returned no orderId: ${JSON.stringify(res)}`
     );
   }
-  // -------------------------------
-  // 💰 PROFIT CALCULATION (AT FULFILLMENT)
-  // -------------------------------
 
-  // CJ usually returns product + logistics cost
-  const cjProductCost = Number( 
+  // -------------------------------
+  // 💰 PROFIT CALCULATION (SAFE)
+  // -------------------------------
+  const cjProductCost = Number(
     data.productAmount || data.goodsAmount || 0
   );
 
@@ -92,25 +86,20 @@ export async function createCjOrderFromFulfillmentOrder(fulfillmentOrderId) {
   );
 
   const supplierCost = cjProductCost + cjShippingCost;
-  // Sale price must be stored earlier (recommended in metaJson or column)
-  const salePrice =
-    fo.salePrice ??
-    (fo.metaJson
-    ? (() => {
-        try {
-          return JSON.parse(fo.metaJson)?.salePrice;
-        } catch {
-          return null;
-        }
-      })()
-    : null);
+
+  let salePrice = fo.salePrice ?? null;
+  if (!salePrice && fo.metaJson) {
+    try {
+      salePrice = JSON.parse(fo.metaJson)?.salePrice ?? null;
+    } catch {}
+  }
 
   const profit =
     salePrice && supplierCost
       ? salePrice - supplierCost
       : null;
 
-  await prisma.fulfillmentOrder.update({
+  const updated = await prisma.fulfillmentOrder.update({
     where: { id: fo.id },
     data: {
       cjOrderId,
@@ -120,48 +109,13 @@ export async function createCjOrderFromFulfillmentOrder(fulfillmentOrderId) {
       status: "ordered",
     },
   });
-  const updated = await prisma.fulfillmentOrder.update({
-    where: { id: fo.id },
-    data: {
-      cjOrderId,
-      status: "ordered",
-    },
-  });
 
   pushLiveLog(
-    `✅ [CJ] Order submitted cjOrderId=${cjOrderId} for Shopify ${fo.shopifyOrderId}`
+    `✅ [CJ] Order submitted cjOrderId=${cjOrderId} profit=${profit ?? "n/a"}`
   );
 
   return updated;
 }
 
-// ---- PROFIT CALCULATION ----
-
-// CJ usually returns product + logistics cost
-const cjProductCost =
-  Number(data.productAmount || data.goodsAmount || 0);
-
-const cjShippingCost =
-  Number(data.logisticsAmount || data.shippingFee || 0);
-
-const supplierCost = cjProductCost + cjShippingCost;
-
-const salePrice = fo.salePrice ?? 0;
-
-const profit =
-  salePrice && supplierCost
-    ? salePrice - supplierCost
-    : null;
-
-await prisma.fulfillmentOrder.update({
-  where: { id: fo.id },
-  data: {
-    cjOrderId,
-    supplierCost,
-    shippingCost: cjShippingCost,
-    profit,
-    status: "ordered",
-  },
-});
 
 
