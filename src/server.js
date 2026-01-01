@@ -31,8 +31,6 @@ app.use(cors());
 // --------------------------------
 // IMPORTANT BODY PARSING RULES
 // --------------------------------
-// ❗ Shopify webhooks MUST use raw body
-// ❗ Everything else uses JSON
 app.use("/api/webhooks", express.raw({ type: "application/json" }));
 app.use(express.json());
 
@@ -48,10 +46,7 @@ function verifyShopifyWebhook(req, rawBody) {
     .update(rawBody)
     .digest("base64");
 
-  return crypto.timingSafeEqual(
-    Buffer.from(digest),
-    Buffer.from(hmac)
-  );
+  return crypto.timingSafeEqual(Buffer.from(digest), Buffer.from(hmac));
 }
 
 // --------------------------------
@@ -73,7 +68,6 @@ app.post("/api/webhooks/shopify/orders-paid", async (req, res) => {
         (i) => String(i.id) === r.lineItemId
       );
 
-      // 💰 SALE PRICE (immutable, accounting-safe)
       const salePrice = lineItem
         ? Number(lineItem.price) * Number(lineItem.quantity || 1)
         : null;
@@ -84,10 +78,7 @@ app.post("/api/webhooks/shopify/orders-paid", async (req, res) => {
           shopifyLineItemId: String(r.lineItemId),
           supplier: r.supplier,
           status: "pending",
-
-          // ✅ PROFIT INPUT
           salePrice,
-
           metaJson: JSON.stringify({
             sku: r.variant?.sku || null,
             quantity: lineItem?.quantity || 1,
@@ -96,13 +87,11 @@ app.post("/api/webhooks/shopify/orders-paid", async (req, res) => {
         },
       });
 
-      // CJ auto-submit (best-effort)
       if (r.supplier === "cj" && r.fulfillmentMode === "auto") {
         try {
           await createCjOrderFromFulfillmentOrder(fo.id);
         } catch (err) {
           console.error("CJ submit failed:", err.message);
-          // retry worker will handle it
         }
       }
     }
@@ -120,22 +109,19 @@ app.post("/api/webhooks/shopify/orders-paid", async (req, res) => {
 attachLiveLogs(app);
 
 // --------------------------------
-// Paths (ESM safe)
+// Paths
 // --------------------------------
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // --------------------------------
-// Dashboard (Vite build)
+// Dashboard
 // --------------------------------
 const dashboardDist = path.join(__dirname, "../dashboard/dist");
-
 app.use("/dashboard", express.static(dashboardDist));
-
-app.get("/dashboard", (_, res) => {
-  res.sendFile(path.join(dashboardDist, "index.html"));
-});
-
+app.get("/dashboard", (_, res) =>
+  res.sendFile(path.join(dashboardDist, "index.html"))
+);
 app.get("/", (_, res) => res.redirect("/dashboard"));
 
 // --------------------------------
@@ -154,13 +140,12 @@ app.post("/api/import", async (req, res) => {
 
     res.json(result);
   } catch (err) {
-    console.error("❌ Import error:", err);
     res.status(500).json({ error: err.message });
   }
 });
 
 // --------------------------------
-// API — DASHBOARD DATA
+// API — DASHBOARD STATS
 // --------------------------------
 app.get("/api/stats", async (_, res) => {
   const [totalRuns, totalImported] = await Promise.all([
@@ -188,7 +173,7 @@ app.get("/api/runs", async (_, res) => {
 });
 
 // --------------------------------
-// API — PROFIT (REAL, AT FULFILLMENT)
+// ✅ API — PROFIT (AUTHORITATIVE)
 // --------------------------------
 app.get("/api/profit", async (_, res) => {
   res.set({
@@ -198,23 +183,16 @@ app.get("/api/profit", async (_, res) => {
   });
 
   const rows = await prisma.fulfillmentOrder.findMany({
-    where: {
-      profit: { not: null },
-    },
+    where: { profit: { not: null } },
     orderBy: { createdAt: "desc" },
     take: 50,
   });
 
-  const totalProfit = rows.reduce(
-    (sum, r) => sum + (r.profit || 0),
-    0
-  );
-
+  const totalProfit = rows.reduce((a, b) => a + (b.profit || 0), 0);
   const avgMargin =
     rows.length > 0
       ? rows.reduce(
-          (sum, r) =>
-            sum + ((r.profit || 0) / (r.salePrice || 1)) * 100,
+          (a, b) => a + ((b.profit || 0) / (b.salePrice || 1)) * 100,
           0
         ) / rows.length
       : 0;
@@ -228,215 +206,66 @@ app.get("/api/profit", async (_, res) => {
 });
 
 // --------------------------------
-// API — SOURCE STATUS (Dashboard)
+// API — SOURCE STATUS
 // --------------------------------
-app.get("/api/status/sources", async (_, res) => {
-  res.set({
-    "Cache-Control": "no-store, no-cache, must-revalidate",
-    Pragma: "no-cache",
-    Expires: "0",
-  });
+app.get("/api/status/sources", (_, res) => {
+  res.set({ "Cache-Control": "no-store" });
 
   res.json({
     sources: [
-      {
-        name: "Amazon",
-        status: "ok",
-        lastSync: new Date(),
-        message: "Operational",
-      },
-      {
-        name: "AliExpress",
-        status: "ok",
-        lastSync: new Date(),
-        message: "Operational",
-      },
-      {
-        name: "Walmart",
-        status: "ok",
-        lastSync: null,
-        message: "Not active",
-      },
-      {
-        name: "CJ Dropshipping",
-        status: "ok",
-        lastSync: new Date(),
-        message: "Connected",
-      },
+      { name: "Amazon", status: "ok", lastSync: new Date(), message: "OK" },
+      { name: "AliExpress", status: "ok", lastSync: new Date(), message: "OK" },
+      { name: "Walmart", status: "ok", lastSync: null, message: "Inactive" },
+      { name: "CJ Dropshipping", status: "ok", lastSync: new Date(), message: "Connected" },
     ],
   });
 });
 
 // --------------------------------
-// API — PROFIT (Dashboard)
-// --------------------------------
-app.get("/api/profit", async (_, res) => {
-  try {
-    /**
-     * Product-level profit (existing logic)
-     */
-    const products = await prisma.productLog.findMany({
-      where: {
-        finalPrice: { not: null },
-        sourcePrice: { not: null },
-      },
-      take: 50,
-      orderBy: { createdAt: "desc" },
-    });
-
-    const enrichedProducts = products.map((p) => {
-      const profit = p.finalPrice - p.sourcePrice;
-      const margin =
-        p.sourcePrice > 0 ? (profit / p.sourcePrice) * 100 : 0;
-
-      return {
-        ...p,
-        profit,
-        margin,
-      };
-    });
-
-    /**
-     * Fulfillment-level profit (NEW)
-     * salePrice - supplierCost (if available later)
-     */
-    const fulfillments = await prisma.fulfillmentOrder.findMany({
-      where: {
-        salePrice: { not: null },
-      },
-      take: 50,
-      orderBy: { createdAt: "desc" },
-    });
-
-    const fulfillmentProfit = fulfillments.reduce(
-      (sum, f) => sum + (f.salePrice || 0),
-      0
-    );
-
-    res.json({
-      totalProfit: enrichedProducts.reduce(
-        (a, b) => a + (b.profit || 0),
-        0
-      ),
-      avgMargin:
-        enrichedProducts.length > 0
-          ? enrichedProducts.reduce((a, b) => a + b.margin, 0) /
-            enrichedProducts.length
-          : 0,
-
-      topProducts: enrichedProducts
-        .sort((a, b) => b.profit - a.profit)
-        .slice(0, 5),
-
-      priceAlerts: [],
-
-      // Optional future use
-      fulfillmentRevenue: fulfillmentProfit,
-    });
-  } catch (err) {
-    console.error("Profit API error:", err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// --------------------------------
-// API — AUTO-SYNC STATUS (FIXES 304)
+// API — AUTO-SYNC STATUS
 // --------------------------------
 app.get("/api/autosync/status", (_, res) => {
-  res.set({
-    "Cache-Control": "no-store, no-cache, must-revalidate",
-    Pragma: "no-cache",
-    Expires: "0",
-  });
-
+  res.set({ "Cache-Control": "no-store" });
   res.json(getAutoSyncStatus());
 });
 
 // --------------------------------
-// API — FULFILLMENT (Dashboard)
+// API — FULFILLMENT
 // --------------------------------
 app.get("/api/fulfillment", async (req, res) => {
-  try {
-    
-    // 🚫 Disable all caching (fixes 304 permanently)
-    res.set({
-      "Cache-Control": "no-store, no-cache, must-revalidate, proxy-revalidate",
-      Pragma: "no-cache",
-      Expires: "0",
-      "Surrogate-Control": "no-store",
-    });
-
-    const limit = Number(req.query.limit || 50);
-    const rows = await listFulfillmentOrders({ limit });
-    res.json({ rows });
-  } catch (err) {
-    console.error("Fulfillment list error:", err);
-    res.status(500).json({ error: err.message });
-  }
+  res.set({ "Cache-Control": "no-store" });
+  const rows = await listFulfillmentOrders({ limit: Number(req.query.limit || 50) });
+  res.json({ rows });
 });
 
-/**
- * Single fulfillment order
- */
 app.get("/api/fulfillment/:id", async (req, res) => {
-  try {
-    res.set({
-      "Cache-Control": "no-store, no-cache, must-revalidate",
-      Pragma: "no-cache",
-      Expires: "0",
-    });
-
-    const row = await getFulfillmentOrder(req.params.id);
-    if (!row) return res.status(404).json({ error: "Not found" });
-    res.json(row);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+  res.set({ "Cache-Control": "no-store" });
+  const row = await getFulfillmentOrder(req.params.id);
+  if (!row) return res.status(404).json({ error: "Not found" });
+  res.json(row);
 });
 
-/**
- * Manual retry (CJ only)
- */
 app.post("/api/fulfillment/:id/retry", async (req, res) => {
-  try {
-    const id = Number(req.params.id);
-
-    const fo = await prisma.fulfillmentOrder.findUnique({ where: { id } });
-    if (!fo) return res.status(404).json({ error: "Not found" });
-
-    if (fo.supplier !== "cj") {
-      return res.status(400).json({ error: "Not a CJ fulfillment" });
-    }
-
-    await createCjOrderFromFulfillmentOrder(id);
-
-    res.json({ ok: true });
-  } catch (err) {
-    console.error("Fulfillment retry error:", err);
-    res.status(500).json({ error: err.message });
+  const id = Number(req.params.id);
+  const fo = await prisma.fulfillmentOrder.findUnique({ where: { id } });
+  if (!fo || fo.supplier !== "cj") {
+    return res.status(400).json({ error: "Invalid fulfillment" });
   }
+  await createCjOrderFromFulfillmentOrder(id);
+  res.json({ ok: true });
 });
 
-/**
- * Manual mark delivered (safe override)
- */
 app.post("/api/fulfillment/:id/mark-delivered", async (req, res) => {
-  try {
-    const id = Number(req.params.id);
-
-    const updated = await prisma.fulfillmentOrder.update({
-      where: { id },
-      data: { status: "delivered" },
-    });
-
-    res.json(updated);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
+  const id = Number(req.params.id);
+  const updated = await prisma.fulfillmentOrder.update({
+    where: { id },
+    data: { status: "delivered" },
+  });
+  res.json(updated);
 });
 
 // --------------------------------
-// START SERVER + WORKERS
+// START SERVER
 // --------------------------------
 const PORT = process.env.PORT || 3000;
 
@@ -446,4 +275,5 @@ app.listen(PORT, () => {
   startFulfillmentRetryWorker();
   console.log("✅ Server running on port", PORT);
 });
+
 
