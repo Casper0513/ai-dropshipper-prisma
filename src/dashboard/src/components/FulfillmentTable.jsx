@@ -1,19 +1,46 @@
-// src/components/FulfillmentTable.jsx
 import { useEffect, useState } from "react";
 
 export default function FulfillmentTable() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState(null);
 
   async function load() {
     try {
-      const res = await fetch("/api/fulfillment");
+      const res = await fetch("/api/fulfillment", { cache: "no-store" });
       const json = await res.json();
       setRows(json.rows || []);
     } catch (e) {
       console.error("Fulfillment load error", e);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function retry(id) {
+    setBusyId(id);
+    try {
+      await fetch(`/api/fulfillment/${id}/retry`, { method: "POST" });
+      await load();
+    } catch (e) {
+      alert("Retry failed");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
+  async function markDelivered(id) {
+    if (!confirm("Mark this order as delivered?")) return;
+    setBusyId(id);
+    try {
+      await fetch(`/api/fulfillment/${id}/mark-delivered`, {
+        method: "POST",
+      });
+      await load();
+    } catch (e) {
+      alert("Failed to mark delivered");
+    } finally {
+      setBusyId(null);
     }
   }
 
@@ -26,95 +53,84 @@ export default function FulfillmentTable() {
   if (loading) return <p>Loading fulfillment…</p>;
 
   return (
-    <div className="tableWrap">
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between" }}>
+        <h3>📦 Fulfillment</h3>
+        <button className="btn sm" onClick={load}>
+          Refresh
+        </button>
+      </div>
+
       <table style={{ width: "100%", borderCollapse: "collapse" }}>
         <thead>
           <tr>
             <th>Order</th>
             <th>Supplier</th>
             <th>Status</th>
-            <th>Sale</th>
-            <th>Cost</th>
-            <th>Profit</th>
-            <th>Margin</th>
             <th>Tracking</th>
+            <th>Profit</th>
+            <th>Actions</th>
             <th>Created</th>
           </tr>
         </thead>
 
         <tbody>
-          {rows.map((r) => {
-            const sale = r.salePrice ?? null;
-            const cost = r.supplierCost ?? null;
-            const profit =
-              sale !== null && cost !== null ? sale - cost : null;
-            const margin =
-              profit !== null && sale
-                ? (profit / sale) * 100
-                : null;
+          {rows.map((r) => (
+            <tr key={r.id}>
+              <td>{r.shopifyOrderId}</td>
+              <td>{r.supplier}</td>
 
-            return (
-              <tr key={r.id}>
-                <td className="mono">{r.shopifyOrderId}</td>
+              <td>
+                <StatusBadge status={r.status} />
+              </td>
 
-                <td>{r.supplier}</td>
+              <td>{r.cjTrackingNumber || "—"}</td>
 
-                <td>
-                  <StatusBadge status={r.status} />
-                </td>
+              <td>
+                {typeof r.profit === "number"
+                  ? `$${r.profit.toFixed(2)}`
+                  : "—"}
+              </td>
 
-                <td>{sale !== null ? `$${sale.toFixed(2)}` : "—"}</td>
-
-                <td>{cost !== null ? `$${cost.toFixed(2)}` : "—"}</td>
-
-                <td>
-                  {profit !== null ? (
-                    <span
-                      style={{
-                        color: profit >= 0 ? "#16a34a" : "#dc2626",
-                        fontWeight: 600,
-                      }}
+              <td style={{ display: "flex", gap: 6 }}>
+                {r.supplier === "cj" &&
+                  (r.status === "failed" || r.status === "pending") && (
+                    <button
+                      className="btn sm"
+                      disabled={busyId === r.id}
+                      onClick={() => retry(r.id)}
                     >
-                      ${profit.toFixed(2)}
-                    </span>
-                  ) : (
-                    "—"
+                      Retry
+                    </button>
                   )}
-                </td>
 
-                <td>
-                  {margin !== null ? (
-                    <span
-                      style={{
-                        color: margin >= 0 ? "#16a34a" : "#dc2626",
-                      }}
-                    >
-                      {margin.toFixed(1)}%
-                    </span>
-                  ) : (
-                    "—"
-                  )}
-                </td>
+                {r.status !== "delivered" && (
+                  <button
+                    className="btn sm"
+                    disabled={busyId === r.id}
+                    onClick={() => markDelivered(r.id)}
+                  >
+                    Delivered
+                  </button>
+                )}
+              </td>
 
-                <td>{r.cjTrackingNumber || "—"}</td>
-
-                <td>
-                  {new Date(r.createdAt).toLocaleString()}
-                </td>
-              </tr>
-            );
-          })}
+              <td>{new Date(r.createdAt).toLocaleString()}</td>
+            </tr>
+          ))}
         </tbody>
       </table>
     </div>
   );
 }
 
+/* ---------------- Status Badge ---------------- */
+
 function StatusBadge({ status }) {
   const colors = {
-    pending: "#facc15",
-    ordered: "#38bdf8",
-    shipped: "#22c55e",
+    pending: "#fde047",
+    ordered: "#7dd3fc",
+    shipped: "#4ade80",
     delivered: "#16a34a",
     failed: "#ef4444",
   };
@@ -134,5 +150,6 @@ function StatusBadge({ status }) {
     </span>
   );
 }
+
 
 
