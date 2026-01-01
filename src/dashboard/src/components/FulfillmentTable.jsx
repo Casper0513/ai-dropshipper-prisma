@@ -1,20 +1,29 @@
 // src/components/FulfillmentTable.jsx
-export default function FulfillmentTable({
-  rows = [],
-  loading = false,
-  onRetry,
-}) {
-  if (loading) {
-    return <p className="mini">Loading fulfillment…</p>;
+import { useEffect, useState } from "react";
+
+export default function FulfillmentTable() {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  async function load() {
+    try {
+      const res = await fetch("/api/fulfillment");
+      const json = await res.json();
+      setRows(json.rows || []);
+    } catch (e) {
+      console.error("Fulfillment load error", e);
+    } finally {
+      setLoading(false);
+    }
   }
 
-  if (!rows.length) {
-    return (
-      <div className="empty-state">
-        No fulfillment orders yet.
-      </div>
-    );
-  }
+  useEffect(() => {
+    load();
+    const t = setInterval(load, 5000);
+    return () => clearInterval(t);
+  }, []);
+
+  if (loading) return <p>Loading fulfillment…</p>;
 
   return (
     <div className="tableWrap">
@@ -24,49 +33,72 @@ export default function FulfillmentTable({
             <th>Order</th>
             <th>Supplier</th>
             <th>Status</th>
+            <th>Sale</th>
+            <th>Cost</th>
+            <th>Profit</th>
+            <th>Margin</th>
             <th>Tracking</th>
-            <th>Action</th>
             <th>Created</th>
           </tr>
         </thead>
 
         <tbody>
           {rows.map((r) => {
-            const retryable =
-              r.supplier === "cj" &&
-              (r.status === "failed" || r.status === "pending") &&
-              !r.cjOrderId;
+            const sale = r.salePrice ?? null;
+            const cost = r.supplierCost ?? null;
+            const profit =
+              sale !== null && cost !== null ? sale - cost : null;
+            const margin =
+              profit !== null && sale
+                ? (profit / sale) * 100
+                : null;
 
             return (
               <tr key={r.id}>
                 <td className="mono">{r.shopifyOrderId}</td>
 
-                <td>
-                  <Pill>{r.supplier}</Pill>
-                </td>
+                <td>{r.supplier}</td>
 
                 <td>
                   <StatusBadge status={r.status} />
                 </td>
 
-                <td className="mono">
-                  {r.cjTrackingNumber || "—"}
-                </td>
+                <td>{sale !== null ? `$${sale.toFixed(2)}` : "—"}</td>
+
+                <td>{cost !== null ? `$${cost.toFixed(2)}` : "—"}</td>
 
                 <td>
-                  {retryable ? (
-                    <button
-                      className="btn sm"
-                      onClick={() => onRetry?.(r.id)}
+                  {profit !== null ? (
+                    <span
+                      style={{
+                        color: profit >= 0 ? "#16a34a" : "#dc2626",
+                        fontWeight: 600,
+                      }}
                     >
-                      Retry
-                    </button>
+                      ${profit.toFixed(2)}
+                    </span>
                   ) : (
                     "—"
                   )}
                 </td>
 
-                <td className="mini">
+                <td>
+                  {margin !== null ? (
+                    <span
+                      style={{
+                        color: margin >= 0 ? "#16a34a" : "#dc2626",
+                      }}
+                    >
+                      {margin.toFixed(1)}%
+                    </span>
+                  ) : (
+                    "—"
+                  )}
+                </td>
+
+                <td>{r.cjTrackingNumber || "—"}</td>
+
+                <td>
                   {new Date(r.createdAt).toLocaleString()}
                 </td>
               </tr>
@@ -75,16 +107,6 @@ export default function FulfillmentTable({
         </tbody>
       </table>
     </div>
-  );
-}
-
-/* ---------- Helpers ---------- */
-
-function Pill({ children }) {
-  return (
-    <span className="pill neutral">
-      {children}
-    </span>
   );
 }
 
@@ -112,4 +134,5 @@ function StatusBadge({ status }) {
     </span>
   );
 }
+
 
