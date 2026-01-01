@@ -78,7 +78,48 @@ export async function createCjOrderFromFulfillmentOrder(fulfillmentOrderId) {
       `[CJ] createOrderV2 returned no orderId: ${JSON.stringify(res)}`
     );
   }
+  // -------------------------------
+  // 💰 PROFIT CALCULATION (AT FULFILLMENT)
+  // -------------------------------
 
+  // CJ usually returns product + logistics cost
+  const cjProductCost = Number( 
+    data.productAmount || data.goodsAmount || 0
+  );
+
+  const cjShippingCost = Number(
+    data.logisticsAmount || data.shippingFee || 0
+  );
+
+  const supplierCost = cjProductCost + cjShippingCost;
+  // Sale price must be stored earlier (recommended in metaJson or column)
+  const salePrice =
+    fo.salePrice ??
+    (fo.metaJson
+    ? (() => {
+        try {
+          return JSON.parse(fo.metaJson)?.salePrice;
+        } catch {
+          return null;
+        }
+      })()
+    : null);
+
+  const profit =
+    salePrice && supplierCost
+      ? salePrice - supplierCost
+      : null;
+
+  await prisma.fulfillmentOrder.update({
+    where: { id: fo.id },
+    data: {
+      cjOrderId,
+      supplierCost,
+      shippingCost: cjShippingCost,
+      profit,
+      status: "ordered",
+    },
+  });
   const updated = await prisma.fulfillmentOrder.update({
     where: { id: fo.id },
     data: {
@@ -93,4 +134,34 @@ export async function createCjOrderFromFulfillmentOrder(fulfillmentOrderId) {
 
   return updated;
 }
+
+// ---- PROFIT CALCULATION ----
+
+// CJ usually returns product + logistics cost
+const cjProductCost =
+  Number(data.productAmount || data.goodsAmount || 0);
+
+const cjShippingCost =
+  Number(data.logisticsAmount || data.shippingFee || 0);
+
+const supplierCost = cjProductCost + cjShippingCost;
+
+const salePrice = fo.salePrice ?? 0;
+
+const profit =
+  salePrice && supplierCost
+    ? salePrice - supplierCost
+    : null;
+
+await prisma.fulfillmentOrder.update({
+  where: { id: fo.id },
+  data: {
+    cjOrderId,
+    supplierCost,
+    shippingCost: cjShippingCost,
+    profit,
+    status: "ordered",
+  },
+});
+
 

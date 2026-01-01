@@ -188,6 +188,46 @@ app.get("/api/runs", async (_, res) => {
 });
 
 // --------------------------------
+// API — PROFIT (REAL, AT FULFILLMENT)
+// --------------------------------
+app.get("/api/profit", async (_, res) => {
+  res.set({
+    "Cache-Control": "no-store",
+    Pragma: "no-cache",
+    Expires: "0",
+  });
+
+  const rows = await prisma.fulfillmentOrder.findMany({
+    where: {
+      profit: { not: null },
+    },
+    orderBy: { createdAt: "desc" },
+    take: 50,
+  });
+
+  const totalProfit = rows.reduce(
+    (sum, r) => sum + (r.profit || 0),
+    0
+  );
+
+  const avgMargin =
+    rows.length > 0
+      ? rows.reduce(
+          (sum, r) =>
+            sum + ((r.profit || 0) / (r.salePrice || 1)) * 100,
+          0
+        ) / rows.length
+      : 0;
+
+  res.json({
+    totalProfit,
+    avgMargin,
+    topProducts: rows.slice(0, 5),
+    priceAlerts: [],
+  });
+});
+
+// --------------------------------
 // API — SOURCE STATUS (Dashboard)
 // --------------------------------
 app.get("/api/status/sources", async (_, res) => {

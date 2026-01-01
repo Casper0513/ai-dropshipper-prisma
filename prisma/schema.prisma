@@ -134,11 +134,11 @@ model FulfillmentOrder {
   // Shopify fulfillment
   shopifyFulfillmentSent Boolean @default(false)
 
-  // 🔥 PROFIT ACCOUNTING
-  salePrice               Float?    // what customer paid
-  costPrice               Float?    // supplier cost
-  profitAtFulfillment     Float?    // immutable realized profit
-  profitRecordedAt        DateTime?
+  // ✅ PROFIT ACCOUNTING (NEW)
+  salePrice              Float?   // Shopify line item price * qty
+  supplierCost           Float?   // CJ product + shipping
+  shippingCost           Float?
+  profit                 Float?
   
   // Metadata for address / qty snapshot
   metaJson              String?
