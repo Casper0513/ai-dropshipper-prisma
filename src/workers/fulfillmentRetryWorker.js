@@ -54,6 +54,9 @@ export function startFulfillmentRetryWorker() {
         const msg = err?.message || "Unknown error";
         const meta = safeJson(fo.metaJson);
 
+        const retryCount = (meta.retryCount || 0) + 1;
+        const MAX_RETRIES = Number(process.env.CJ_MAX_RETRIES || "3");
+
         /**
          * 🟡 FALLBACK CONDITIONS
          * - Profit blocked
@@ -89,12 +92,39 @@ export function startFulfillmentRetryWorker() {
         });
 
         pushLiveLog(
-          `❌ CJ retry failed orderId=${fo.shopifyOrderId}: ${msg}`
+          `❌ CJ retry failed (${retryCount}/${MAX_RETRIES}) order=${fo.shopifyOrderId}`
         );
-      }
-    }
-  };
 
+        // 🚑 AUTO-FALLBACK → ALIEXPRESS
+        if (retryCount >= MAX_RETRIES) {
+          pushLiveLog(
+            `🚨 CJ max retries reached — switching to AliExpress for order=${fo.shopifyOrderId}`
+          );
+
+          await prisma.fulfillmentOrder.create({
+            data: {
+              shopifyOrderId: fo.shopifyOrderId,
+              shopifyLineItemId: fo.shopifyLineItemId,
+              supplier: "aliexpress",
+              status: "pending",
+
+              // Preserve profit context
+              salePrice: fo.salePrice,
+
+              metaJson: JSON.stringify({
+                ...meta,
+                fallbackFrom: "cj",
+                fallbackReason: "CJ retry limit reached",
+                fallbackAt: new Date().toISOString(),
+              }),
+            },
+          });
+    
+          pushLiveLog(
+            `🛒 AliExpress fallback created for Shopify order=${fo.shopifyOrderId}`
+          );
+        }
+      }
   // ▶ Run immediately, then on interval
   tick();
   setInterval(tick, INTERVAL_MS);
@@ -111,6 +141,4 @@ function safeJson(s) {
     return {};
   }
 }
-
-
 
