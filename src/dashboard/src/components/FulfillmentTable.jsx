@@ -7,7 +7,9 @@ export default function FulfillmentTable() {
 
   async function load() {
     try {
-      const res = await fetch("/api/fulfillment", { cache: "no-store" });
+      const res = await fetch("/api/fulfillment", {
+        headers: { "Cache-Control": "no-store" },
+      });
       const json = await res.json();
       setRows(json.rows || []);
     } catch (e) {
@@ -17,28 +19,24 @@ export default function FulfillmentTable() {
     }
   }
 
-  async function retry(id) {
-    setBusyId(id);
+  async function action(id, type) {
     try {
-      await fetch(`/api/fulfillment/${id}/retry`, { method: "POST" });
-      await load();
-    } catch (e) {
-      alert("Retry failed");
-    } finally {
-      setBusyId(null);
-    }
-  }
+      setBusyId(id);
 
-  async function markDelivered(id) {
-    if (!confirm("Mark this order as delivered?")) return;
-    setBusyId(id);
-    try {
-      await fetch(`/api/fulfillment/${id}/mark-delivered`, {
+      const res = await fetch(`/api/fulfillment/${id}/${type}`, {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
       });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || "Action failed");
+      }
+
       await load();
     } catch (e) {
-      alert("Failed to mark delivered");
+      console.error(`Action ${type} failed`, e);
+      alert(e.message);
     } finally {
       setBusyId(null);
     }
@@ -53,15 +51,8 @@ export default function FulfillmentTable() {
   if (loading) return <p>Loading fulfillment…</p>;
 
   return (
-    <div>
-      <div style={{ display: "flex", justifyContent: "space-between" }}>
-        <h3>📦 Fulfillment</h3>
-        <button className="btn sm" onClick={load}>
-          Refresh
-        </button>
-      </div>
-
-      <table style={{ width: "100%", borderCollapse: "collapse" }}>
+    <div className="tableWrap">
+      <table>
         <thead>
           <tr>
             <th>Order</th>
@@ -77,7 +68,8 @@ export default function FulfillmentTable() {
         <tbody>
           {rows.map((r) => (
             <tr key={r.id}>
-              <td>{r.shopifyOrderId}</td>
+              <td className="mono">{r.shopifyOrderId}</td>
+
               <td>{r.supplier}</td>
 
               <td>
@@ -92,30 +84,46 @@ export default function FulfillmentTable() {
                   : "—"}
               </td>
 
-              <td style={{ display: "flex", gap: 6 }}>
-                {r.supplier === "cj" &&
-                  (r.status === "failed" || r.status === "pending") && (
+              <td>
+                <div style={{ display: "flex", gap: 6 }}>
+                  {/* 🔁 Retry (CJ only, failed) */}
+                  {r.supplier === "cj" && r.status === "failed" && (
                     <button
                       className="btn sm"
                       disabled={busyId === r.id}
-                      onClick={() => retry(r.id)}
+                      onClick={() => action(r.id, "retry")}
                     >
-                      Retry
+                      🔁 Retry
                     </button>
                   )}
 
-                {r.status !== "delivered" && (
-                  <button
-                    className="btn sm"
-                    disabled={busyId === r.id}
-                    onClick={() => markDelivered(r.id)}
-                  >
-                    Delivered
-                  </button>
-                )}
+                  {/* ✅ Mark Ordered */}
+                  {r.status === "pending" && (
+                    <button
+                      className="btn sm"
+                      disabled={busyId === r.id}
+                      onClick={() => action(r.id, "mark-ordered")}
+                    >
+                      ✅ Ordered
+                    </button>
+                  )}
+
+                  {/* 📦 Mark Delivered */}
+                  {(r.status === "ordered" || r.status === "shipped") && (
+                    <button
+                      className="btn sm"
+                      disabled={busyId === r.id}
+                      onClick={() => action(r.id, "mark-delivered")}
+                    >
+                      📦 Delivered
+                    </button>
+                  )}
+                </div>
               </td>
 
-              <td>{new Date(r.createdAt).toLocaleString()}</td>
+              <td className="mini">
+                {new Date(r.createdAt).toLocaleString()}
+              </td>
             </tr>
           ))}
         </tbody>
@@ -124,13 +132,11 @@ export default function FulfillmentTable() {
   );
 }
 
-/* ---------------- Status Badge ---------------- */
-
 function StatusBadge({ status }) {
   const colors = {
-    pending: "#fde047",
-    ordered: "#7dd3fc",
-    shipped: "#4ade80",
+    pending: "#facc15",
+    ordered: "#38bdf8",
+    shipped: "#22c55e",
     delivered: "#16a34a",
     failed: "#ef4444",
   };
@@ -150,6 +156,7 @@ function StatusBadge({ status }) {
     </span>
   );
 }
+
 
 
 

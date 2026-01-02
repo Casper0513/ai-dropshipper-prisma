@@ -255,6 +255,24 @@ app.post("/api/fulfillment/:id/retry", async (req, res) => {
   res.json({ ok: true });
 });
 
+/**
+ * Manual mark ordered
+ */
+app.post("/api/fulfillment/:id/mark-ordered", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+
+    const updated = await prisma.fulfillmentOrder.update({
+      where: { id },
+      data: { status: "ordered" },
+    });
+
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post("/api/fulfillment/:id/mark-delivered", async (req, res) => {
   const id = Number(req.params.id);
   const updated = await prisma.fulfillmentOrder.update({
