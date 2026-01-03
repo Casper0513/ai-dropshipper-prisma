@@ -273,6 +273,25 @@ app.post("/api/fulfillment/:id/mark-ordered", async (req, res) => {
   }
 });
 
+/**
+ * Approve (alias of mark-ordered)
+ * Some dashboards want "Approve" instead of "Ordered"
+ */
+app.post("/api/fulfillment/:id/approve", async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+
+    const updated = await prisma.fulfillmentOrder.update({
+      where: { id },
+      data: { status: "ordered" },
+    });
+
+    res.json(updated);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post("/api/fulfillment/:id/mark-delivered", async (req, res) => {
   const id = Number(req.params.id);
   const updated = await prisma.fulfillmentOrder.update({

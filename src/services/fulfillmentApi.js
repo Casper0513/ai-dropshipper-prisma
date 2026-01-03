@@ -24,6 +24,11 @@ export async function listFulfillmentOrders({ limit = 50 } = {}) {
 
   return rows.map((fo) => {
     const meta = safeJson(fo.metaJson);
+    const retryCount = Number(meta.retryCount || 0);
+    const fallbackProvider = meta.fallback?.provider || null;
+
+    const isCj = fo.supplier === "cj";
+    const isFallback = Boolean(fallbackProvider);
 
     return {
       id: fo.id,
@@ -43,10 +48,26 @@ export async function listFulfillmentOrders({ limit = 50 } = {}) {
       shippingCost: fo.shippingCost,
       profit: fo.profit,
 
-      // 🔁 RETRY METADATA (from metaJson)
-      retryCount: meta.retryCount || 0,
+      // 🔁 RETRY / FALLBACK INFO
+      retryCount,
       lastRetryError: meta.lastRetryError || null,
       lastRetryAt: meta.lastRetryAt || null,
+
+      fallbackProvider,
+      isFallback,
+
+      // 🧠 UI DECISION FLAGS (IMPORTANT)
+      canRetry:
+        isCj &&
+        !isFallback &&
+        fo.status === "failed" &&
+        !fo.cjOrderId,
+
+      canAutoFulfill:
+        isCj &&
+        !isFallback &&
+        fo.status === "pending" &&
+        !fo.cjOrderId,
 
       createdAt: fo.createdAt,
       updatedAt: fo.updatedAt,
@@ -55,7 +76,7 @@ export async function listFulfillmentOrders({ limit = 50 } = {}) {
 }
 
 /**
- * Get single fulfillment order
+ * Get single fulfillment order (detail view / future)
  */
 export async function getFulfillmentOrder(id) {
   const fo = await prisma.fulfillmentOrder.findUnique({
@@ -65,12 +86,17 @@ export async function getFulfillmentOrder(id) {
   if (!fo) return null;
 
   const meta = safeJson(fo.metaJson);
+  const retryCount = Number(meta.retryCount || 0);
+  const fallbackProvider = meta.fallback?.provider || null;
 
   return {
     ...fo,
-    retryCount: meta.retryCount || 0,
+    retryCount,
     lastRetryError: meta.lastRetryError || null,
     lastRetryAt: meta.lastRetryAt || null,
+    fallbackProvider,
+    isFallback: Boolean(fallbackProvider),
   };
 }
+
 

@@ -13,11 +13,11 @@ const INTERVAL_MS = Math.max(5, RETRY_MINUTES) * 60 * 1000;
  * Guarantees:
  * - CJ only
  * - Never duplicates CJ orders
- * - Auto-fallback CJ → AliExpress
- * - Safe for Railway / long-running servers
+ * - Auto-fallback CJ → AliExpress (IN-PLACE)
+ * - Idempotent & restart-safe
  */
 export function startFulfillmentRetryWorker() {
-  pushLiveLog(`🔁 CJ fulfillment retry every ${RETRY_MINUTES} minutes`);
+  pushLiveLog(`🔁 CJ fulfillment retry every ${RETRY_MINUTES} minutes (max=${MAX_RETRIES})`);
 
   const tick = async () => {
     let candidates = [];
@@ -33,71 +33,72 @@ export function startFulfillmentRetryWorker() {
         orderBy: { createdAt: "asc" },
       });
     } catch (err) {
-      pushLiveLog(`❌ Retry fetch failed: ${err.message}`);
+      pushLiveLog(`❌ Retry fetch failed: ${err?.message || err}`);
       return;
     }
 
     for (const fo of candidates) {
+      const meta = safeJson(fo.metaJson);
+      const retryCount = Number(meta.retryCount || 0);
+
+      // 🛑 Already fell back → never touch again
+      if (meta.fallback?.provider === "aliexpress") {
+        continue;
+      }
+
       try {
         pushLiveLog(
-          `♻️ Retrying CJ fulfillment order=${fo.shopifyOrderId} (id=${fo.id})`
+          `♻️ Retrying CJ fulfillment order=${fo.shopifyOrderId} (id=${fo.id}) attempt ${retryCount + 1}/${MAX_RETRIES}`
         );
 
         await createCjOrderFromFulfillmentOrder(fo.id);
 
-        pushLiveLog(
-          `✅ CJ retry success order=${fo.shopifyOrderId}`
-        );
+        pushLiveLog(`✅ CJ retry success order=${fo.shopifyOrderId}`);
       } catch (err) {
         const msg = err?.message || "Unknown error";
-        const meta = safeJson(fo.metaJson);
-        const retryCount = (meta.retryCount || 0) + 1;
+        const nextRetry = retryCount + 1;
 
-        // ⛔ Update CJ failure
+        // ⛔ Update failure state
         await prisma.fulfillmentOrder.update({
           where: { id: fo.id },
           data: {
             status: "failed",
             metaJson: JSON.stringify({
               ...meta,
+              retryCount: nextRetry,
               lastRetryError: msg.slice(0, 500),
               lastRetryAt: new Date().toISOString(),
-              retryCount,
             }),
           },
         });
 
         pushLiveLog(
-          `❌ CJ retry failed (${retryCount}/${MAX_RETRIES}) order=${fo.shopifyOrderId}`
+          `❌ CJ retry failed (${nextRetry}/${MAX_RETRIES}) order=${fo.shopifyOrderId}`
         );
 
-        // 🚑 AUTO-FALLBACK → ALIEXPRESS
-        if (retryCount >= MAX_RETRIES) {
-          pushLiveLog(
-            `🚨 CJ max retries reached — switching to AliExpress for order=${fo.shopifyOrderId}`
-          );
-
-          await prisma.fulfillmentOrder.create({
+        // 🚨 AUTO-FALLBACK → ALIEXPRESS (IN PLACE)
+        if (nextRetry >= MAX_RETRIES) {
+          await prisma.fulfillmentOrder.update({
+            where: { id: fo.id },
             data: {
-              shopifyOrderId: fo.shopifyOrderId,
-              shopifyLineItemId: fo.shopifyLineItemId,
               supplier: "aliexpress",
               status: "pending",
-
-              // preserve accounting
-              salePrice: fo.salePrice,
-
               metaJson: JSON.stringify({
                 ...meta,
-                fallbackFrom: "cj",
-                fallbackReason: "CJ retry limit reached",
-                fallbackAt: new Date().toISOString(),
+                retryCount: nextRetry,
+                lastRetryError: msg.slice(0, 500),
+                fallback: {
+                  provider: "aliexpress",
+                  from: "cj",
+                  reason: "CJ retry limit reached",
+                  at: new Date().toISOString(),
+                },
               }),
             },
           });
 
           pushLiveLog(
-            `🛒 AliExpress fallback created for order=${fo.shopifyOrderId}`
+            `🟣 Fallback applied: CJ → AliExpress order=${fo.shopifyOrderId}`
           );
         }
       }
