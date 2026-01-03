@@ -70,14 +70,31 @@ export default function FulfillmentTable() {
         <tbody>
           {rows.map((r) => {
             const retryCount = r.retryCount || 0;
-            const retryDisabled =
-              retryCount >= MAX_RETRIES || busyId === r.id;
 
             return (
               <tr key={r.id}>
                 <td className="mono">{r.shopifyOrderId}</td>
 
-                <td>{r.supplier}</td>
+                <td>
+                  <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                    <span>{r.supplier}</span>
+
+                    {r.isFallback && (
+                      <span
+                        style={{
+                          fontSize: 11,
+                          padding: "2px 6px",
+                          borderRadius: 6,
+                          background: "#fde68a",
+                          fontWeight: 600,
+                        }}
+                        title="CJ failed → AliExpress fallback"
+                      >
+                        Fallback → {r.fallbackProvider}
+                      </span>
+                    )}
+                  </div>
+                </td>
 
                 <td>
                   <StatusBadge status={r.status} />
@@ -93,15 +110,15 @@ export default function FulfillmentTable() {
 
                 <td>
                   <div style={{ display: "flex", gap: 6 }}>
-                    {/* 🔁 Retry (CJ only) */}
-                    {r.supplier === "cj" && r.status === "failed" && (
+                    {/* 🔁 Retry (backend decides) */}
+                    {r.canRetry && (
                       <button
                         className="btn sm"
-                        disabled={retryDisabled}
+                        disabled={busyId === r.id}
                         title={
-                          retryCount >= MAX_RETRIES
-                            ? "Retry limit reached"
-                            : r.lastRetryError || "Retry CJ order"
+                          r.lastRetryError
+                            ? `Last error: ${r.lastRetryError}`
+                            : "Retry CJ fulfillment"
                         }
                         onClick={() => action(r.id, "retry")}
                       >
@@ -110,7 +127,7 @@ export default function FulfillmentTable() {
                     )}
 
                     {/* ✅ Mark Ordered */}
-                    {r.status === "pending" && (
+                    {r.canAutoFulfill && (
                       <button
                         className="btn sm"
                         disabled={busyId === r.id}
@@ -169,6 +186,7 @@ function StatusBadge({ status }) {
     </span>
   );
 }
+
 
 
 
