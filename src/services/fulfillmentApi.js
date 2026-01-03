@@ -2,25 +2,55 @@
 import { prisma } from "../db/client.js";
 
 /**
+ * Safely parse metaJson
+ */
+function safeJson(s) {
+  if (!s) return {};
+  try {
+    return JSON.parse(s);
+  } catch {
+    return {};
+  }
+}
+
+/**
  * Get recent fulfillment orders for dashboard
  */
 export async function listFulfillmentOrders({ limit = 50 } = {}) {
-  return prisma.fulfillmentOrder.findMany({
+  const rows = await prisma.fulfillmentOrder.findMany({
     orderBy: { createdAt: "desc" },
     take: limit,
-    select: {
-      id: true,
-      shopifyOrderId: true,
-      shopifyLineItemId: true,
-      supplier: true,
-      status: true,
-      cjOrderId: true,
-      cjTrackingNumber: true,
-      shopifyFulfillmentSent: true,
-      metaJson: true,
-      createdAt: true,
-      updatedAt: true,
-    },
+  });
+
+  return rows.map((fo) => {
+    const meta = safeJson(fo.metaJson);
+
+    return {
+      id: fo.id,
+      shopifyOrderId: fo.shopifyOrderId,
+      shopifyLineItemId: fo.shopifyLineItemId,
+
+      supplier: fo.supplier,
+      status: fo.status,
+
+      cjOrderId: fo.cjOrderId,
+      cjTrackingNumber: fo.cjTrackingNumber,
+      shopifyFulfillmentSent: fo.shopifyFulfillmentSent,
+
+      // 💰 PROFIT DATA
+      salePrice: fo.salePrice,
+      supplierCost: fo.supplierCost,
+      shippingCost: fo.shippingCost,
+      profit: fo.profit,
+
+      // 🔁 RETRY METADATA (from metaJson)
+      retryCount: meta.retryCount || 0,
+      lastRetryError: meta.lastRetryError || null,
+      lastRetryAt: meta.lastRetryAt || null,
+
+      createdAt: fo.createdAt,
+      updatedAt: fo.updatedAt,
+    };
   });
 }
 
@@ -28,7 +58,19 @@ export async function listFulfillmentOrders({ limit = 50 } = {}) {
  * Get single fulfillment order
  */
 export async function getFulfillmentOrder(id) {
-  return prisma.fulfillmentOrder.findUnique({
+  const fo = await prisma.fulfillmentOrder.findUnique({
     where: { id: Number(id) },
   });
+
+  if (!fo) return null;
+
+  const meta = safeJson(fo.metaJson);
+
+  return {
+    ...fo,
+    retryCount: meta.retryCount || 0,
+    lastRetryError: meta.lastRetryError || null,
+    lastRetryAt: meta.lastRetryAt || null,
+  };
 }
+
