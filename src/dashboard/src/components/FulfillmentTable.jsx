@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 
+const MAX_RETRIES = 3;
+
 export default function FulfillmentTable() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -66,66 +68,77 @@ export default function FulfillmentTable() {
         </thead>
 
         <tbody>
-          {rows.map((r) => (
-            <tr key={r.id}>
-              <td className="mono">{r.shopifyOrderId}</td>
+          {rows.map((r) => {
+            const retryCount = r.retryCount || 0;
+            const retryDisabled =
+              retryCount >= MAX_RETRIES || busyId === r.id;
 
-              <td>{r.supplier}</td>
+            return (
+              <tr key={r.id}>
+                <td className="mono">{r.shopifyOrderId}</td>
 
-              <td>
-                <StatusBadge status={r.status} />
-              </td>
+                <td>{r.supplier}</td>
 
-              <td>{r.cjTrackingNumber || "—"}</td>
+                <td>
+                  <StatusBadge status={r.status} />
+                </td>
 
-              <td>
-                {typeof r.profit === "number"
-                  ? `$${r.profit.toFixed(2)}`
-                  : "—"}
-              </td>
+                <td>{r.cjTrackingNumber || "—"}</td>
 
-              <td>
-                <div style={{ display: "flex", gap: 6 }}>
-                  {/* 🔁 Retry (CJ only, failed) */}
-                  {r.supplier === "cj" && r.status === "failed" && (
-                    <button
-                      className="btn sm"
-                      disabled={busyId === r.id}
-                      onClick={() => action(r.id, "retry")}
-                    >
-                      🔁 Retry
-                    </button>
-                  )}
+                <td>
+                  {typeof r.profit === "number"
+                    ? `$${r.profit.toFixed(2)}`
+                    : "—"}
+                </td>
 
-                  {/* ✅ Mark Ordered */}
-                  {r.status === "pending" && (
-                    <button
-                      className="btn sm"
-                      disabled={busyId === r.id}
-                      onClick={() => action(r.id, "mark-ordered")}
-                    >
-                      ✅ Ordered
-                    </button>
-                  )}
+                <td>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    {/* 🔁 Retry (CJ only) */}
+                    {r.supplier === "cj" && r.status === "failed" && (
+                      <button
+                        className="btn sm"
+                        disabled={retryDisabled}
+                        title={
+                          retryCount >= MAX_RETRIES
+                            ? "Retry limit reached"
+                            : r.lastRetryError || "Retry CJ order"
+                        }
+                        onClick={() => action(r.id, "retry")}
+                      >
+                        🔁 Retry ({retryCount}/{MAX_RETRIES})
+                      </button>
+                    )}
 
-                  {/* 📦 Mark Delivered */}
-                  {(r.status === "ordered" || r.status === "shipped") && (
-                    <button
-                      className="btn sm"
-                      disabled={busyId === r.id}
-                      onClick={() => action(r.id, "mark-delivered")}
-                    >
-                      📦 Delivered
-                    </button>
-                  )}
-                </div>
-              </td>
+                    {/* ✅ Mark Ordered */}
+                    {r.status === "pending" && (
+                      <button
+                        className="btn sm"
+                        disabled={busyId === r.id}
+                        onClick={() => action(r.id, "mark-ordered")}
+                      >
+                        ✅ Ordered
+                      </button>
+                    )}
 
-              <td className="mini">
-                {new Date(r.createdAt).toLocaleString()}
-              </td>
-            </tr>
-          ))}
+                    {/* 📦 Mark Delivered */}
+                    {(r.status === "ordered" || r.status === "shipped") && (
+                      <button
+                        className="btn sm"
+                        disabled={busyId === r.id}
+                        onClick={() => action(r.id, "mark-delivered")}
+                      >
+                        📦 Delivered
+                      </button>
+                    )}
+                  </div>
+                </td>
+
+                <td className="mini">
+                  {new Date(r.createdAt).toLocaleString()}
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
@@ -156,6 +169,7 @@ function StatusBadge({ status }) {
     </span>
   );
 }
+
 
 
 
