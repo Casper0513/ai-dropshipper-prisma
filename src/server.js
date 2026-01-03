@@ -22,6 +22,7 @@ import {
 import { startTrackingSyncWorker } from "./workers/trackingSyncWorker.js";
 import { startFulfillmentRetryWorker } from "./workers/fulfillmentRetryWorker.js";
 import { startAliExpressFulfillmentWorker } from "./workers/aliexpressFulfillmentWorker.js";
+import { startAliExpressTrackingWorker } from "./workers/aliexpressTrackingWorker.js";
 
 // --------------------------------
 // App bootstrap
@@ -312,6 +313,7 @@ app.listen(PORT, () => {
   startTrackingSyncWorker();
   startFulfillmentRetryWorker();
   startAliExpressFulfillmentWorker();
+  startAliExpressTrackingWorker();
   console.log("✅ Server running on port", PORT);
 });
 
