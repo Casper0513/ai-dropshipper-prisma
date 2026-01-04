@@ -72,10 +72,13 @@ export function startFulfillmentRetryWorker() {
         where: { id: fo.id },
         data: {
           metaJson: JSON.stringify({
-            ...meta,
-            _retryLock: true,
-            _retryLockAt: new Date().toISOString(),
-          }),
+          ...meta,
+          _retryLock: true,
+          _retryLockAt: meta._retryLockAt,
+          retryCount: nextRetry,
+          lastRetryError: msg.slice(0, 500),
+          lastRetryAt: new Date().toISOString(),
+        }),
         },
       });
 
