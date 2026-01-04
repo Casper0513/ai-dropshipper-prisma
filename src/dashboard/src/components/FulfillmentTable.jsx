@@ -71,27 +71,32 @@ export default function FulfillmentTable() {
           {rows.map((r) => {
             const retryCount = r.retryCount || 0;
 
-            // ----------------------------
-            // 🔒 UI guardrails (DERIVED)
-            // ----------------------------
+            // ----------------------------------
+            // 🔒 UI GUARDRAILS (DERIVED, SAFE)
+            // ----------------------------------
             const isTerminal = r.status === "delivered";
+
             const isFallback =
-              r.supplier === "aliexpress" &&
+              r.supplier === "aliexpress" ||
               retryCount >= MAX_RETRIES;
 
             const canRetry =
               r.supplier === "cj" &&
               r.status === "failed" &&
               retryCount < MAX_RETRIES &&
-              !isTerminal;
+              !isTerminal &&
+              !isFallback;
 
             const canMarkOrdered =
               r.status === "pending" &&
-              !isTerminal;
+              !isTerminal &&
+              !isFallback;
 
             const canMarkDelivered =
               (r.status === "ordered" || r.status === "shipped") &&
               !isTerminal;
+
+            const isBusy = busyId === r.id;
 
             return (
               <tr key={r.id}>
@@ -136,7 +141,7 @@ export default function FulfillmentTable() {
                     {canRetry && (
                       <button
                         className="btn sm"
-                        disabled={busyId === r.id}
+                        disabled={isBusy}
                         title={
                           r.lastRetryError
                             ? `Last error: ${r.lastRetryError}`
@@ -152,7 +157,7 @@ export default function FulfillmentTable() {
                     {canMarkOrdered && (
                       <button
                         className="btn sm"
-                        disabled={busyId === r.id}
+                        disabled={isBusy}
                         onClick={() => action(r.id, "mark-ordered")}
                       >
                         ✅ Ordered
@@ -163,7 +168,7 @@ export default function FulfillmentTable() {
                     {canMarkDelivered && (
                       <button
                         className="btn sm"
-                        disabled={busyId === r.id}
+                        disabled={isBusy}
                         onClick={() => action(r.id, "mark-delivered")}
                       >
                         📦 Delivered
@@ -208,6 +213,7 @@ function StatusBadge({ status }) {
     </span>
   );
 }
+
 
 
 
