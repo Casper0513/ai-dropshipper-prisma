@@ -15,8 +15,7 @@ const INTERVAL_MS = Math.max(5, INTERVAL_MINUTES) * 60 * 1000;
  * - Picks up pending AliExpress fallback orders
  * - Marks them as ordered (manual or future automation)
  * - Assigns tracking number (placeholder)
- * - Never touches CJ orders
- * - Never duplicates fulfillment
+ * - Guarded against duplicates & terminal states
  */
 export function startAliExpressFulfillmentWorker() {
   pushLiveLog(
@@ -41,12 +40,49 @@ export function startAliExpressFulfillmentWorker() {
     }
 
     for (const fo of rows) {
+      const meta = safeJson(fo.metaJson);
+
+      // --------------------------------------------------
+      // 🛑 TERMINAL STATE GUARD
+      // --------------------------------------------------
+      if (["delivered", "cancelled", "returned"].includes(fo.status)) {
+        continue;
+      }
+
+      // --------------------------------------------------
+      // 🛑 FALLBACK GUARD (must be CJ → AliExpress)
+      // --------------------------------------------------
+      if (meta.fallback?.provider !== "aliexpress") {
+        continue;
+      }
+
+      // --------------------------------------------------
+      // 🔒 LOCK GUARD
+      // --------------------------------------------------
+      if (meta._aeLock === true) {
+        continue;
+      }
+
+      // Acquire lock
+      await prisma.fulfillmentOrder.update({
+        where: { id: fo.id },
+        data: {
+          metaJson: JSON.stringify({
+            ...meta,
+            _aeLock: true,
+            _aeLockAt: new Date().toISOString(),
+          }),
+        },
+      });
+
       try {
         pushLiveLog(
           `🛒 [AliExpress] Claiming fulfillment order=${fo.shopifyOrderId}`
         );
 
-        // 🔒 Mark as ordered (manual fulfillment for now)
+        // --------------------------------------------------
+        // ✅ MARK ORDERED (IDEMPOTENT)
+        // --------------------------------------------------
         await prisma.fulfillmentOrder.update({
           where: { id: fo.id },
           data: {
@@ -59,7 +95,7 @@ export function startAliExpressFulfillmentWorker() {
         );
 
         // --------------------------------------------------
-        // ➕ ADD: Assign tracking number + mark shipped
+        // 🚚 ASSIGN TRACKING + SHIP
         // --------------------------------------------------
         const trackingNumber =
           "AE-" + Math.random().toString(36).substring(2, 12).toUpperCase();
@@ -68,7 +104,7 @@ export function startAliExpressFulfillmentWorker() {
           where: { id: fo.id },
           data: {
             status: "shipped",
-            cjTrackingNumber: trackingNumber, // reused column (intentional)
+            cjTrackingNumber: trackingNumber, // reused column intentionally
           },
         });
 
@@ -79,6 +115,27 @@ export function startAliExpressFulfillmentWorker() {
         pushLiveLog(
           `❌ [AliExpress] Failed order=${fo.shopifyOrderId}: ${err.message}`
         );
+      } finally {
+        // --------------------------------------------------
+        // 🔓 RELEASE LOCK
+        // --------------------------------------------------
+        const latest = await prisma.fulfillmentOrder.findUnique({
+          where: { id: fo.id },
+        });
+
+        const latestMeta = safeJson(latest?.metaJson);
+
+        if (latestMeta._aeLock) {
+          delete latestMeta._aeLock;
+          delete latestMeta._aeLockAt;
+
+          await prisma.fulfillmentOrder.update({
+            where: { id: fo.id },
+            data: {
+              metaJson: JSON.stringify(latestMeta),
+            },
+          });
+        }
       }
     }
   };
@@ -87,4 +144,17 @@ export function startAliExpressFulfillmentWorker() {
   tick();
   setInterval(tick, INTERVAL_MS);
 }
+
+/**
+ * Safe JSON parse helper
+ */
+function safeJson(s) {
+  if (!s) return {};
+  try {
+    return JSON.parse(s);
+  } catch {
+    return {};
+  }
+}
+
 
