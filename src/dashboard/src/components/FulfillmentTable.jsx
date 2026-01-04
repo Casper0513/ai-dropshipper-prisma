@@ -71,6 +71,28 @@ export default function FulfillmentTable() {
           {rows.map((r) => {
             const retryCount = r.retryCount || 0;
 
+            // ----------------------------
+            // 🔒 UI guardrails (DERIVED)
+            // ----------------------------
+            const isTerminal = r.status === "delivered";
+            const isFallback =
+              r.supplier === "aliexpress" &&
+              retryCount >= MAX_RETRIES;
+
+            const canRetry =
+              r.supplier === "cj" &&
+              r.status === "failed" &&
+              retryCount < MAX_RETRIES &&
+              !isTerminal;
+
+            const canMarkOrdered =
+              r.status === "pending" &&
+              !isTerminal;
+
+            const canMarkDelivered =
+              (r.status === "ordered" || r.status === "shipped") &&
+              !isTerminal;
+
             return (
               <tr key={r.id}>
                 <td className="mono">{r.shopifyOrderId}</td>
@@ -79,7 +101,7 @@ export default function FulfillmentTable() {
                   <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
                     <span>{r.supplier}</span>
 
-                    {r.isFallback && (
+                    {isFallback && (
                       <span
                         style={{
                           fontSize: 11,
@@ -88,9 +110,9 @@ export default function FulfillmentTable() {
                           background: "#fde68a",
                           fontWeight: 600,
                         }}
-                        title="CJ failed → AliExpress fallback"
+                        title="CJ retries exhausted → AliExpress fallback"
                       >
-                        Fallback → {r.fallbackProvider}
+                        Fallback
                       </span>
                     )}
                   </div>
@@ -110,8 +132,8 @@ export default function FulfillmentTable() {
 
                 <td>
                   <div style={{ display: "flex", gap: 6 }}>
-                    {/* 🔁 Retry (backend decides) */}
-                    {r.canRetry && (
+                    {/* 🔁 Retry (CJ only, backend-enforced) */}
+                    {canRetry && (
                       <button
                         className="btn sm"
                         disabled={busyId === r.id}
@@ -127,7 +149,7 @@ export default function FulfillmentTable() {
                     )}
 
                     {/* ✅ Mark Ordered */}
-                    {r.canAutoFulfill && (
+                    {canMarkOrdered && (
                       <button
                         className="btn sm"
                         disabled={busyId === r.id}
@@ -138,7 +160,7 @@ export default function FulfillmentTable() {
                     )}
 
                     {/* 📦 Mark Delivered */}
-                    {(r.status === "ordered" || r.status === "shipped") && (
+                    {canMarkDelivered && (
                       <button
                         className="btn sm"
                         disabled={busyId === r.id}
@@ -186,6 +208,7 @@ function StatusBadge({ status }) {
     </span>
   );
 }
+
 
 
 
