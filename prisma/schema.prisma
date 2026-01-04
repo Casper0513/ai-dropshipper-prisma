@@ -134,12 +134,12 @@ model FulfillmentOrder {
   // Shopify fulfillment
   shopifyFulfillmentSent Boolean @default(false)
 
-  // ✅ PROFIT ACCOUNTING (NEW)
-  salePrice              Float?   // Shopify line item price * qty
-  supplierCost           Float?   // CJ product + shipping
+  // ✅ PROFIT ACCOUNTING
+  salePrice              Float?
+  supplierCost           Float?
   shippingCost           Float?
   profit                 Float?
-  
+
   // Metadata for address / qty snapshot
   metaJson              String?
 
@@ -148,7 +148,31 @@ model FulfillmentOrder {
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 
+  auditLogs              FulfillmentAuditLog[]
+
   @@index([shopifyOrderId])
+}
+
+//////////////////////
+// ✅ AUDIT LOG (NEW)
+//////////////////////
+
+model FulfillmentAuditLog {
+  id                 Int      @id @default(autoincrement())
+
+  fulfillmentOrderId Int
+  fulfillmentOrder   FulfillmentOrder   @relation(fields: [fulfillmentOrderId], references: [id], onDelete: Cascade)
+  
+  action             String   // retry | mark-ordered | mark-delivered | approve | fallback
+  previousStatus     String?
+  newStatus          String?
+
+  performedBy        String   // "admin" | "system"
+  reason             String?
+
+  createdAt          DateTime @default(now())
+
+  @@index([fulfillmentOrderId])
 }
 
 
