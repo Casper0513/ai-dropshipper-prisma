@@ -37,7 +37,7 @@ app.use("/api/webhooks", express.raw({ type: "application/json" }));
 app.use(express.json());
 
 // --------------------------------
-// 🔒 Guardrail helpers (ADDED)
+// 🔒 Guardrail helpers
 // --------------------------------
 const CJ_MAX_RETRIES = Number(process.env.CJ_MAX_RETRIES || "3");
 
@@ -92,15 +92,27 @@ function enforceFoGuardrails(fo, action) {
 
   // ⛔ Terminal lock
   if (isTerminal(fo.status)) {
-    throw Object.assign(new Error("Fulfillment already delivered"), {
-      statusCode: 409,
-    });
+    throw Object.assign(
+      new Error("Fulfillment already delivered"),
+      { statusCode: 409 }
+    );
+  }
+
+  // ⛔ Profit block
+  if (meta.blockedReason === "NEGATIVE_PROFIT") {
+    throw Object.assign(
+      new Error("Order blocked due to negative profit"),
+      { statusCode: 409 }
+    );
   }
 
   // ⛔ CJ retry rules
   if (action === "retry") {
     if (fo.supplier !== "cj") {
-      throw Object.assign(new Error("Retry is CJ-only"), { statusCode: 400 });
+      throw Object.assign(
+        new Error("Retry is CJ-only"),
+        { statusCode: 400 }
+      );
     }
     if (fo.cjOrderId) {
       throw Object.assign(
@@ -120,12 +132,24 @@ function enforceFoGuardrails(fo, action) {
         { statusCode: 409 }
       );
     }
+
+    // ✅ ADD: retry lock parity with worker
+    if (meta._retryLock === true) {
+      throw Object.assign(
+        new Error("Fulfillment retry already in progress"),
+        { statusCode: 409 }
+      );
+    }
   }
 
-  // ⛔ Profit block
-  if (meta.blockedReason === "NEGATIVE_PROFIT") {
+  // ✅ ADD: prevent CJ actions after AliExpress fallback
+  if (
+    action === "mark-ordered" &&
+    meta.fallback?.provider === "aliexpress" &&
+    fo.supplier === "cj"
+  ) {
     throw Object.assign(
-      new Error("Order blocked due to negative profit"),
+      new Error("CJ fulfillment disabled after AliExpress fallback"),
       { statusCode: 409 }
     );
   }
@@ -393,6 +417,7 @@ app.listen(PORT, () => {
   startAliExpressTrackingWorker();
   console.log("✅ Server running on port", PORT);
 });
+
 
 
 
