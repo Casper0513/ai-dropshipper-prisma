@@ -15,9 +15,12 @@ const INTERVAL_MS = Math.max(5, RETRY_MINUTES) * 60 * 1000;
  * - Never duplicates CJ orders
  * - Auto-fallback CJ → AliExpress (IN-PLACE)
  * - Idempotent & restart-safe
+ * - Guarded against terminal states + double execution
  */
 export function startFulfillmentRetryWorker() {
-  pushLiveLog(`🔁 CJ fulfillment retry every ${RETRY_MINUTES} minutes (max=${MAX_RETRIES})`);
+  pushLiveLog(
+    `🔁 CJ fulfillment retry every ${RETRY_MINUTES} minutes (max=${MAX_RETRIES})`
+  );
 
   const tick = async () => {
     let candidates = [];
@@ -41,10 +44,40 @@ export function startFulfillmentRetryWorker() {
       const meta = safeJson(fo.metaJson);
       const retryCount = Number(meta.retryCount || 0);
 
-      // 🛑 Already fell back → never touch again
+      // --------------------------------------------------
+      // 🛑 TERMINAL STATE GUARD
+      // --------------------------------------------------
+      if (
+        ["delivered", "cancelled", "returned"].includes(fo.status)
+      ) {
+        continue;
+      }
+
+      // --------------------------------------------------
+      // 🔒 IN-PROGRESS LOCK (prevents double execution)
+      // --------------------------------------------------
+      if (meta._retryLock === true) {
+        continue;
+      }
+
+      // --------------------------------------------------
+      // 🛑 FALLBACK HARD STOP
+      // --------------------------------------------------
       if (meta.fallback?.provider === "aliexpress") {
         continue;
       }
+
+      // 🔐 Acquire lock
+      await prisma.fulfillmentOrder.update({
+        where: { id: fo.id },
+        data: {
+          metaJson: JSON.stringify({
+            ...meta,
+            _retryLock: true,
+            _retryLockAt: new Date().toISOString(),
+          }),
+        },
+      });
 
       try {
         pushLiveLog(
@@ -101,6 +134,27 @@ export function startFulfillmentRetryWorker() {
             `🟣 Fallback applied: CJ → AliExpress order=${fo.shopifyOrderId}`
           );
         }
+      } finally {
+        // --------------------------------------------------
+        // 🔓 RELEASE LOCK
+        // --------------------------------------------------
+        const latest = await prisma.fulfillmentOrder.findUnique({
+          where: { id: fo.id },
+        });
+
+        const latestMeta = safeJson(latest?.metaJson);
+
+        if (latestMeta._retryLock) {
+          delete latestMeta._retryLock;
+          delete latestMeta._retryLockAt;
+
+          await prisma.fulfillmentOrder.update({
+            where: { id: fo.id },
+            data: {
+              metaJson: JSON.stringify(latestMeta),
+            },
+          });
+        }
       }
     }
   };
@@ -121,4 +175,5 @@ function safeJson(s) {
     return {};
   }
 }
+
 
