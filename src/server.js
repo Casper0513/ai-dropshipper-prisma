@@ -307,6 +307,42 @@ app.get("/api/autosync/status", (_, res) => {
 });
 
 // --------------------------------
+// API — SOURCE STATUS (Dashboard)
+// --------------------------------
+app.get("/api/status/sources", (_, res) => {
+  noStore(res);
+
+  res.json({
+    sources: [
+      {
+        name: "Amazon",
+        status: "ok",
+        lastSync: new Date(),
+        message: "Operational",
+      },
+      {
+        name: "AliExpress",
+        status: "ok",
+        lastSync: new Date(),
+        message: "Operational",
+      },
+      {
+        name: "CJ Dropshipping",
+        status: "ok",
+        lastSync: new Date(),
+        message: "Connected",
+      },
+      {
+        name: "Walmart",
+        status: "inactive",
+        lastSync: null,
+        message: "Disabled",
+      },
+    ],
+  });
+});
+
+// --------------------------------
 // API — FULFILLMENT
 // --------------------------------
 app.get("/api/fulfillment", async (req, res) => {
