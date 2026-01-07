@@ -90,7 +90,7 @@ model SyncedVariant {
 
   // Shopify mapping
   shopifyProductId String
-  shopifyVariantId String
+  shopifyVariantId String   @unique 
   shopifyHandle    String?
 
   // Pricing (USED FOR AMAZON / ALI ONLY)
