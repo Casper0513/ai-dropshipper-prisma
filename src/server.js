@@ -441,6 +441,47 @@ app.post("/api/fulfillment/:id/mark-delivered", async (req, res) => {
 });
 
 // --------------------------------
+// API — PROFIT (AUTHORITATIVE)
+// --------------------------------
+app.get("/api/profit", async (_, res) => {
+  noStore(res);
+
+  const rows = await prisma.fulfillmentOrder.findMany({
+    where: {
+      profit: { not: null },
+    },
+    orderBy: { createdAt: "desc" },
+    take: 50,
+  });
+
+  const totalProfit = rows.reduce(
+    (sum, r) => sum + (r.profit || 0),
+    0
+  );
+
+  const avgMargin =
+    rows.length > 0
+      ? rows.reduce(
+          (sum, r) =>
+            sum + ((r.profit || 0) / (r.salePrice || 1)) * 100,
+          0
+        ) / rows.length
+      : 0;
+
+  res.json({
+    totalProfit,
+    avgMargin,
+    recent: rows.map((r) => ({
+      orderId: r.shopifyOrderId,
+      profit: r.profit,
+      salePrice: r.salePrice,
+      supplierCost: r.supplierCost,
+      createdAt: r.createdAt,
+    })),
+  });
+});
+
+// --------------------------------
 // START SERVER
 // --------------------------------
 const PORT = process.env.PORT || 3000;
