@@ -12,6 +12,7 @@ export const CONFIG = {
   shopify: {
     domain: process.env.SHOPIFY_STORE_DOMAIN,
     token: process.env.SHOPIFY_ADMIN_ACCESS_TOKEN,
+    webhookSecret: process.env.SHOPIFY_WEBHOOK_SECRET,
   },
   keywords: (process.env.KEYWORDS || "")
     .split(",")
