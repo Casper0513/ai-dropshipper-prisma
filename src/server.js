@@ -23,6 +23,9 @@ import { startTrackingSyncWorker } from "./workers/trackingSyncWorker.js";
 import { startFulfillmentRetryWorker } from "./workers/fulfillmentRetryWorker.js";
 import { startAliExpressFulfillmentWorker } from "./workers/aliexpressFulfillmentWorker.js";
 import { startAliExpressTrackingWorker } from "./workers/aliexpressTrackingWorker.js";
+import { startCjMappingWorker } from "./workers/cjMappingWorker.js";
+
+startCjMappingWorker();
 
 // --------------------------------
 // App bootstrap
