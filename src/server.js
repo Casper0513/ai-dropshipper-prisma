@@ -24,8 +24,11 @@ import { startFulfillmentRetryWorker } from "./workers/fulfillmentRetryWorker.js
 import { startAliExpressFulfillmentWorker } from "./workers/aliexpressFulfillmentWorker.js";
 import { startAliExpressTrackingWorker } from "./workers/aliexpressTrackingWorker.js";
 import { startCjMappingWorker } from "./workers/cjMappingWorker.js";
+import { searchHotCj } from "./routes/hotCj.js";
 
 startCjMappingWorker();
+
+app.get("/api/hot/cj", searchHotCj);
 
 // --------------------------------
 // App bootstrap
