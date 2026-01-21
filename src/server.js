@@ -28,8 +28,6 @@ import { searchHotCj } from "./routes/hotCj.js";
 
 startCjMappingWorker();
 
-app.get("/api/hot/cj", searchHotCj);
-
 // --------------------------------
 // App bootstrap
 // --------------------------------
@@ -354,6 +352,7 @@ app.get("/api/status/sources", (_, res) => {
 // --------------------------------
 // API — FULFILLMENT
 // --------------------------------
+
 app.get("/api/fulfillment", async (req, res) => {
   noStore(res);
   const rows = await listFulfillmentOrders({
@@ -448,6 +447,12 @@ app.post("/api/fulfillment/:id/mark-delivered", async (req, res) => {
       .json({ error: err.message });
   }
 });
+
+// --------------------------------
+// API — HOT PRODUCTS
+// --------------------------------
+app.get("/api/hot/amazon", searchHotAmazon);
+app.get("/api/hot/cj", searchHotCj);
 
 // --------------------------------
 // API — PROFIT (AUTHORITATIVE)
