@@ -25,6 +25,7 @@ import { startAliExpressFulfillmentWorker } from "./workers/aliexpressFulfillmen
 import { startAliExpressTrackingWorker } from "./workers/aliexpressTrackingWorker.js";
 import { startCjMappingWorker } from "./workers/cjMappingWorker.js";
 import { searchHotCj } from "./routes/hotCj.js";
+import { searchHotAmazon } from "./routes/hotAmazon.js";
 
 startCjMappingWorker();
 
