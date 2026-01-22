@@ -2,44 +2,61 @@
 import axios from "axios";
 import { CONFIG } from "../config.js";
 
+const AMAZON_HOT_URL =
+  "https://amazon-datahub.p.rapidapi.com/product-search";
+
 export async function searchHotAmazon(req, res) {
   try {
-    const q = req.query.q;
-    if (!q) return res.status(400).json({ error: "Missing query" });
+    const q =
+      typeof req.query.q === "string" && req.query.q.trim()
+        ? req.query.q.trim()
+        : "best sellers";
 
-    const { data } = await axios.get(
-      "https://real-time-amazon-data.p.rapidapi.com/search",
-      {
-        params: {
-          query: q,
-          country: "US",
-          page: "1",
-        },
-        headers: {
-          "X-RapidAPI-Key": CONFIG.rapid.key,
-          "X-RapidAPI-Host": CONFIG.rapid.host,
-        },
-      }
-    );
+    const category = req.query.category || "aps";
+    const limit = Number(req.query.limit || 20);
+    const country = req.query.country || "US";
 
-    const ranked = (data?.data?.products || [])
-      .map(p => ({
-        asin: p.asin,
-        title: p.title,
-        price: Number(p.price?.current_price || 0),
-        rating: Number(p.rating || 0),
-        reviews: Number(p.reviews_count || 0),
-        image: p.thumbnail,
-        score:
-          (Number(p.rating || 0) * 20) +
-          Math.log10(Number(p.reviews_count || 1)) * 10
-      }))
-      .filter(p => p.price >= 15 && p.price <= 80)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 20);
+    const response = await axios.get(AMAZON_HOT_URL, {
+      params: {
+        query: q,
+        category,
+        page: 1,
+        country,
+      },
+      headers: {
+        "X-RapidAPI-Key": CONFIG.rapid.key,
+        "X-RapidAPI-Host": CONFIG.rapid.host,
+      },
+      timeout: 15000,
+    });
 
-    res.json({ source: "amazon", results: ranked });
+    const items = response?.data?.data || [];
+
+    // Normalize response (VERY important)
+    const products = items.slice(0, limit).map((p) => ({
+      asin: p.asin,
+      title: p.title,
+      price: Number(p.price?.value || 0),
+      currency: p.price?.currency || "USD",
+      image: p.main_image,
+      rating: p.rating || null,
+      reviews: p.reviews_count || 0,
+      url: p.url,
+      source: "amazon",
+    }));
+
+    res.json({
+      source: "amazon",
+      query: q,
+      count: products.length,
+      products,
+    });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error("🔥 Amazon hot search error:", err?.message);
+
+    res.status(500).json({
+      error: "Amazon hot product fetch failed",
+      details: err?.message,
+    });
   }
 }
