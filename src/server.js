@@ -25,7 +25,7 @@ import { startAliExpressFulfillmentWorker } from "./workers/aliexpressFulfillmen
 import { startAliExpressTrackingWorker } from "./workers/aliexpressTrackingWorker.js";
 import { startCjMappingWorker } from "./workers/cjMappingWorker.js";
 import { searchHotCj } from "./routes/hotCj.js";
-import { searchHotAmazon } from "./routes/hotAmazon.js";
+import { amazonBestSellers } from "./routes/amazonBestSellers.js";
 
 startCjMappingWorker();
 
@@ -452,7 +452,7 @@ app.post("/api/fulfillment/:id/mark-delivered", async (req, res) => {
 // --------------------------------
 // API — HOT PRODUCTS
 // --------------------------------
-app.get("/api/hot/amazon", searchHotAmazon);
+app.get("/api/amazon/best-sellers", amazonBestSellers);
 app.get("/api/hot/cj", searchHotCj);
 
 // --------------------------------
