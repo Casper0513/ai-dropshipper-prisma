@@ -16,7 +16,7 @@ export async function searchHotAmazon(req, res) {
     const limit = Number(req.query.limit || 20);
     const country = req.query.country || "US";
 
-    const response = await axios.get(AMAZON_HOT_URL, {
+    const response = await axios.get("https://amazon-datahub.p.rapidapi.com/products/search", {
       params: {
         query: q,
         category,
