@@ -5,7 +5,7 @@ export async function amazonBestSellers(req, res) {
     const category = req.query.category || "electronics";
 
     const response = await axios.get(
-      "https://amazon-datahub.p.rapidapi.com/best-sellers",
+      "https://real-time-amazon-data.p.rapidapi.com/best-sellers",
       {
         params: {
           category,
@@ -13,7 +13,7 @@ export async function amazonBestSellers(req, res) {
         },
         headers: {
           "X-RapidAPI-Key": process.env.RAPIDAPI_KEY,
-          "X-RapidAPI-Host": "amazon-datahub.p.rapidapi.com",
+          "X-RapidAPI-Host": "real-time-amazon-data.p.rapidapi.com",
         },
         timeout: 15000,
       }
