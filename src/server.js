@@ -21,12 +21,8 @@ import {
 
 import { startTrackingSyncWorker } from "./workers/trackingSyncWorker.js";
 import { startFulfillmentRetryWorker } from "./workers/fulfillmentRetryWorker.js";
-import { startAliExpressFulfillmentWorker } from "./workers/aliexpressFulfillmentWorker.js";
-import { startAliExpressTrackingWorker } from "./workers/aliexpressTrackingWorker.js";
 import { startCjMappingWorker } from "./workers/cjMappingWorker.js";
 import { searchHotCj } from "./routes/hotCj.js";
-import { amazonBestSellers } from "./routes/amazonBestSellers.js";
-
 startCjMappingWorker();
 
 // --------------------------------
@@ -323,28 +319,10 @@ app.get("/api/status/sources", (_, res) => {
   res.json({
     sources: [
       {
-        name: "Amazon",
-        status: "ok",
-        lastSync: new Date(),
-        message: "Operational",
-      },
-      {
-        name: "AliExpress",
-        status: "ok",
-        lastSync: new Date(),
-        message: "Operational",
-      },
-      {
         name: "CJ Dropshipping",
         status: "ok",
         lastSync: new Date(),
         message: "Connected",
-      },
-      {
-        name: "Walmart",
-        status: "inactive",
-        lastSync: null,
-        message: "Disabled",
       },
     ],
   });
@@ -452,7 +430,6 @@ app.post("/api/fulfillment/:id/mark-delivered", async (req, res) => {
 // --------------------------------
 // API — HOT PRODUCTS
 // --------------------------------
-app.get("/api/amazon/best-sellers", amazonBestSellers);
 app.get("/api/hot/cj", searchHotCj);
 
 // --------------------------------
@@ -505,8 +482,6 @@ app.listen(PORT, () => {
   startAutoSync();
   startTrackingSyncWorker();
   startFulfillmentRetryWorker();
-  startAliExpressFulfillmentWorker();
-  startAliExpressTrackingWorker();
   console.log("✅ Server running on port", PORT);
 });
 
