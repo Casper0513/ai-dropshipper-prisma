@@ -1,8 +1,8 @@
 
 // src/services/sourceDetails.js
-import { fetchProductDetails as fetchAmazonDetails } from "./amazonDetails.js";
-import { fetchAliExpressDetails } from "./aliexpressDetails.js";
-import { fetchWalmartDetails } from "./walmartDetails.js";
+// import { fetchProductDetails as fetchAmazonDetails } from "./amazonDetails.js";
+// import { fetchAliExpressDetails } from "./aliexpressDetails.js";
+// import { fetchWalmartDetails } from "./walmartDetails.js";
 
 /**
  * variant: SyncedVariant record
