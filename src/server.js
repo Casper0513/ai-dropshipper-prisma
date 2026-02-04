@@ -259,10 +259,11 @@ app.post("/api/import", async (req, res) => {
     const { keyword, mode, markupPercent, source } = req.body;
     if (!keyword) return res.status(400).json({ error: "Missing keyword" });
 
+// ✅ FORCE CJ ONLY (ignore whatever UI sends)
     const result = await importKeyword(keyword, {
       mode,
       markupPercent,
-      source,
+      source: "cj",
     });
 
     res.json(result);

@@ -25,9 +25,13 @@ async function fetchUpTo20Products(target) {
 }
 
 export async function importKeyword(target, options = {}) {
-  const overrideMarkup = options.markupPercent;
-  const source = options.source || "unknown";
-  const mode = options.mode || CONFIG.mode || "search";
+  // ✅ CJ ONLY MODE (hard stop)
+  if (opts.source && opts.source !== "cj") {
+   opts.source = "cj";
+  }
+  // const overrideMarkup = options.markupPercent;
+  // const source = options.source || "unknown";
+  // const mode = options.mode || CONFIG.mode || "search";
 
   log.info(
     `Starting import for "${target}" (mode: ${mode}, source: ${source}, override markup: ${
