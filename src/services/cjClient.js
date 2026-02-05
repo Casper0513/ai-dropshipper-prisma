@@ -26,6 +26,22 @@ function getHeaders() {
   };
 }
 
+// --------------------------------
+// CJ RATE LIMITER (1 req/sec)
+// --------------------------------
+let lastRequestTime = 0;
+
+async function cjThrottle() {
+  const now = Date.now();
+  const diff = now - lastRequestTime;
+
+  if (diff < 1000) {
+    await new Promise((r) => setTimeout(r, 1000 - diff));
+  }
+
+  lastRequestTime = Date.now();
+}
+
 /**
  * Unified CJ request
  */
@@ -33,6 +49,9 @@ export async function cjRequest(method, path, { params, data } = {}) {
   const url = `${CJ_BASE}${path}`;
 
   try {
+     // 🔒 enforce CJ QPS limit
+    await cjThrottle();
+
     const res = await axios.request({
       method,
       url,
