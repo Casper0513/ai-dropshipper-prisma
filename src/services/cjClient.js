@@ -5,31 +5,55 @@ const CJ_BASE = "https://developers.cjdropshipping.com/api2.0/v1";
 
 /**
  * Required env:
- *  CJ_API_KEY
- *  CJ_ACCESS_TOKEN
+ *  CJ_EMAIL
+ *  CJ_PASSWORD
  */
 
-function getHeaders() {
-  const apiKey = process.env.CJ_API_KEY;
-  const token = process.env.CJ_ACCESS_TOKEN;
+let cachedToken = null;
+let tokenExpiresAt = 0;
 
-  if (!apiKey || !token) {
-    throw new Error(
-      "CJ credentials missing: set CJ_API_KEY and CJ_ACCESS_TOKEN"
-    );
-  }
-
-  return {
-    "Content-Type": "application/json",
-    "CJ-Access-Token": token,
-    "CJ-API-Key": apiKey,
-  };
+function nowMs() {
+  return Date.now();
 }
 
-// --------------------------------
-// GLOBAL CJ REQUEST QUEUE (REAL FIX)
-// Ensures strict 1 request at a time
-// --------------------------------
+//
+// 🔐 Get CJ access token
+//
+async function getAccessToken(forceRefresh = false) {
+  if (!forceRefresh && cachedToken && nowMs() < tokenExpiresAt) {
+    return cachedToken;
+  }
+
+  const email = process.env.CJ_EMAIL;
+  const password = process.env.CJ_PASSWORD;
+
+  if (!email || !password) {
+    throw new Error("CJ credentials missing: set CJ_EMAIL and CJ_PASSWORD");
+  }
+
+  const res = await axios.post(
+    `${CJ_BASE}/authentication/getAccessToken`,
+    { email, password },
+    { timeout: 30_000 }
+  );
+
+  const data = res.data?.data || {};
+  const token = data.accessToken || data.token || data.access_token;
+
+  if (!token) {
+    throw new Error(`CJ auth failed: ${JSON.stringify(res.data)}`);
+  }
+
+  cachedToken = token;
+  tokenExpiresAt = nowMs() + 55 * 60 * 1000; // 55 min safe TTL
+
+  return cachedToken;
+}
+
+//
+// 🧠 GLOBAL CJ REQUEST QUEUE
+// Guarantees STRICT 1 request at a time
+//
 let cjQueue = Promise.resolve();
 
 function enqueueCJ(fn) {
@@ -38,25 +62,9 @@ function enqueueCJ(fn) {
   return run;
 }
 
-// --------------------------------
-// CJ RATE LIMITER (1 req/sec)
-// --------------------------------
-let lastRequestTime = 0;
-
-async function cjThrottle() {
-  const now = Date.now();
-  const diff = now - lastRequestTime;
-
-  if (diff < 1000) {
-    await new Promise((r) => setTimeout(r, 1000 - diff));
-  }
-
-  lastRequestTime = Date.now();
-}
-
-/**
- * Unified CJ request
- */
+//
+// 🚀 Unified CJ request (rate-limit safe)
+//
 export async function cjRequest(method, path, { params, data } = {}) {
   return enqueueCJ(async () => {
     const token = await getAccessToken();
@@ -78,28 +86,28 @@ export async function cjRequest(method, path, { params, data } = {}) {
       throw new Error(`CJ error: ${JSON.stringify(res.data)}`);
     }
 
-    // 🔒 HARD WAIT to respect QPS
+    // 🔒 HARD WAIT → respects CJ 1 req/sec limit
     await new Promise((r) => setTimeout(r, 1100));
 
     return res.data?.data ?? res.data;
   });
 }
 
-
-/**
- * Submit CJ order
- */
+//
+// 📦 Submit CJ order
+//
 export async function submitCJOrder(payload) {
-  return cjRequest("POST", "/shopping/order/createOrderV2", {
+  return cjRequest("POST", "/shopping/order/createOrder", {
     data: payload,
   });
 }
 
-/**
- * Get CJ tracking info
- */
+//
+// 🚚 Get tracking
+//
 export async function cjGetTracking(trackNumber) {
   return cjRequest("GET", "/logistic/trackInfo", {
     params: { trackNumber },
   });
 }
+

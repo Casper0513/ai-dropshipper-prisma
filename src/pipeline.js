@@ -1,6 +1,6 @@
 
 import pLimit from "p-limit";
-import { fetchAmazonData } from "./services/rapidapi.js";
+// import { fetchAmazonData } from "./services/rapidapi.js";
 import { generateDescription } from "./services/openai.js";
 import { createProduct } from "./services/shopify.js";
 import { normalizeProduct } from "./utils/normalize.js";
