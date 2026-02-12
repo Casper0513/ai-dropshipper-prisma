@@ -27,6 +27,18 @@ function getHeaders() {
 }
 
 // --------------------------------
+// GLOBAL CJ REQUEST QUEUE (REAL FIX)
+// Ensures strict 1 request at a time
+// --------------------------------
+let cjQueue = Promise.resolve();
+
+function enqueueCJ(fn) {
+  const run = cjQueue.then(() => fn());
+  cjQueue = run.catch(() => {}); // keep queue alive on error
+  return run;
+}
+
+// --------------------------------
 // CJ RATE LIMITER (1 req/sec)
 // --------------------------------
 let lastRequestTime = 0;
@@ -46,11 +58,9 @@ async function cjThrottle() {
  * Unified CJ request
  */
 export async function cjRequest(method, path, { params, data } = {}) {
-  const url = `${CJ_BASE}${path}`;
-
-  try {
-     // 🔒 enforce CJ QPS limit
-    await cjThrottle();
+  return enqueueCJ(async () => {
+    const token = await getAccessToken();
+    const url = `${CJ_BASE}${path}`;
 
     const res = await axios.request({
       method,
@@ -58,21 +68,23 @@ export async function cjRequest(method, path, { params, data } = {}) {
       params,
       data,
       timeout: 45_000,
-      headers: getHeaders(),
+      headers: {
+        "Content-Type": "application/json",
+        "CJ-Access-Token": token,
+      },
     });
 
     if (res.data?.code && res.data.code !== 200) {
       throw new Error(`CJ error: ${JSON.stringify(res.data)}`);
     }
 
+    // 🔒 HARD WAIT to respect QPS
+    await new Promise((r) => setTimeout(r, 1100));
+
     return res.data?.data ?? res.data;
-  } catch (err) {
-    const msg = err.response?.data || err.message;
-    throw new Error(
-      `CJ API error ${method} ${path}: ${JSON.stringify(msg)}`
-    );
-  }
+  });
 }
+
 
 /**
  * Submit CJ order
