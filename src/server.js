@@ -256,7 +256,7 @@ app.get("/", (_, res) => res.redirect("/dashboard"));
 // --------------------------------
 app.post("/api/import", async (req, res) => {
   try {
-    const { keyword, mode, markupPercent, source } = req.body;
+    const { keyword, mode, markupPercent } = req.body;
     if (!keyword) return res.status(400).json({ error: "Missing keyword" });
 
 // ✅ FORCE CJ ONLY (ignore whatever UI sends)

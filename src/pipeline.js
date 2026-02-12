@@ -1,6 +1,5 @@
 
 import pLimit from "p-limit";
-// import { fetchAmazonData } from "./services/rapidapi.js";
 import { generateDescription } from "./services/openai.js";
 import { createProduct } from "./services/shopify.js";
 import { normalizeProduct } from "./utils/normalize.js";
@@ -16,7 +15,7 @@ const enhancementLimit = pLimit(2);
 async function fetchUpTo20Products(target) {
   let all = [];
   for (let page = 1; page <= 4; page++) {
-    const batch = await fetchAmazonData("search", target, page);
+    // const batch = await fetchAmazonData("search", target, page);
     if (!Array.isArray(batch) || batch.length === 0) break;
     all.push(...batch);
     if (all.length >= 20) break;
