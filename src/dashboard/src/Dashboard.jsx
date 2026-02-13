@@ -243,7 +243,7 @@ function ProfitSection({ profit }) {
                       <td>${Number(p.profit ?? 0).toFixed(2)}</td>
                       <td>{Number(p.margin ?? 0).toFixed(1)}%</td>
                       <td>
-                        <Pill>{p.source || "amazon"}</Pill>
+                        <Pill>{p.source || "CJ"}</Pill>
                       </td>
                     </tr>
                   ))}
@@ -286,7 +286,7 @@ function ProfitSection({ profit }) {
                         {Number(a.changePercent ?? 0).toFixed(1)}%
                       </td>
                       <td>
-                        <Pill>{a.source || "amazon"}</Pill>
+                        <Pill>{a.source || "CJ"}</Pill>
                       </td>
                     </tr>
                   ))}
@@ -306,7 +306,7 @@ function ImportForm({ onRunCompleted, onLog }) {
   const [keyword, setKeyword] = useState("");
   const [mode, setMode] = useState("search");
   const [markup, setMarkup] = useState("");
-  const [source, setSource] = useState("amazon");
+  const [source, setSource] = useState("CJ");
   const [running, setRunning] = useState(false);
 
   const submit = async (e) => {
@@ -344,7 +344,7 @@ function ImportForm({ onRunCompleted, onLog }) {
         <div>
           <div className="card-title">Import Products</div>
           <div className="mini">
-            Amazon / AliExpress / Walmart via your backend pipeline
+            CJ Dropshipping
           </div>
         </div>
         <Badge>Auto-sync ready</Badge>
@@ -375,9 +375,7 @@ function ImportForm({ onRunCompleted, onLog }) {
           <div className="field">
             <label>Source</label>
             <select value={source} onChange={(e) => setSource(e.target.value)}>
-              <option value="amazon">Amazon</option>
-              <option value="aliexpress">AliExpress</option>
-              <option value="walmart">Walmart</option>
+              <option value="CJ">CJ Dropshipping</option>
             </select>
           </div>
 
